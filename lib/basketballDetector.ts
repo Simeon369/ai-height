@@ -85,7 +85,7 @@ export function detectBasketball(
 
     // Find "sports ball" detections
     // COCO category names vary — check for common labels
-    const ballLabels = ['sports ball', 'ball', 'frisbee']; // frisbee sometimes triggers for round objects
+    const ballLabels = ['sports ball', 'ball', 'frisbee', 'bottle']; // frisbee sometimes triggers for round objects
     
     let bestBall = null;
     let bestScore = 0;

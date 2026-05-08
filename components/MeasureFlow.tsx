@@ -42,7 +42,7 @@ const PHASE_UI: Record<
 > = {
   detecting_ball: {
     title: 'Finding Basketball',
-    instruction: 'Point the camera so the basketball and the full body are visible',
+    instruction: 'Point the camera at a basketball (or water bottle for testing)',
     icon: <CircleDot className="w-5 h-5" />,
   },
   calibrating: {
