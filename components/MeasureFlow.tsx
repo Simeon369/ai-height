@@ -42,7 +42,7 @@ const PHASE_UI: Record<
 > = {
   detecting_ball: {
     title: 'Finding Basketball',
-    instruction: 'Point the camera at a basketball (or water bottle for testing)',
+    instruction: 'Point the camera at a basketball (or exercise book for testing)',
     icon: <CircleDot className="w-5 h-5" />,
   },
   calibrating: {
@@ -240,11 +240,12 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
           };
         }
 
-        // Initialize both models in parallel
-        await Promise.all([
-          initialize(),
-          initBallDetector().then(() => setBallDetectorReady(true)),
-        ]);
+        // Initialize ball detector first (critical for calibration)
+        await initBallDetector();
+        setBallDetectorReady(true);
+        
+        // Start loading pose detection in background (not awaited)
+        initialize();
       } catch (err) {
         console.error('Camera setup failed:', err);
       }
@@ -478,14 +479,14 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
       <div className="relative flex-1 overflow-hidden">
         <video
           ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover z-0"
           autoPlay
           playsInline
           muted
         />
         <canvas
           ref={overlayCanvasRef}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"
         />
 
 
@@ -513,12 +514,14 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         )}
 
         {/* Loading overlay */}
-        {(isLoading || !cameraReady || !ballDetectorReady) && (
+        {(!cameraReady || !ballDetectorReady || (phase.startsWith('measuring_') && !isReady)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-20">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
               <p className="text-zinc-300 text-sm">
-                {!cameraReady ? 'Starting camera...' : 'Loading AI models...'}
+                {!cameraReady ? 'Starting camera...' : 
+                 !ballDetectorReady ? 'Loading detection model...' : 
+                 'Finalizing AI setup...'}
               </p>
             </div>
           </div>

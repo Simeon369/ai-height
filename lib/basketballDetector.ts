@@ -37,19 +37,20 @@ export async function initBallDetector(): Promise<void> {
     );
 
     const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20/wasm'
     );
 
     objectDetector = await ObjectDetector.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
           'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite',
-        delegate: 'GPU',
+        delegate: 'CPU',
       },
       runningMode: 'VIDEO',
-      scoreThreshold: 0.3,
+      scoreThreshold: 0.15,
       maxResults: 5,
     });
+    console.log('ObjectDetector initialized successfully');
   } catch (err) {
     console.error('Failed to initialize ObjectDetector:', err);
     throw err;
@@ -85,10 +86,18 @@ export function detectBasketball(
 
     // Find "sports ball" detections
     // COCO category names vary — check for common labels
-    const ballLabels = ['sports ball', 'ball', 'frisbee', 'bottle']; // frisbee sometimes triggers for round objects
+    const ballLabels = ['sports ball', 'ball', 'frisbee', 'bottle', 'book']; // frisbee sometimes triggers for round objects
     
     let bestBall = null;
     let bestScore = 0;
+
+    // Log all raw detections for debugging
+    if (result.detections.length > 0) {
+      const labels = result.detections.flatMap(d => d.categories.map(c => `${c.categoryName}(${Math.round((c.score??0)*100)}%)`));
+      console.log('AI Sees:', labels.join(', '));
+    } else {
+      // console.log('AI is looking but sees nothing...'); // Un-comment if you want to spam console to prove it's running
+    }
 
     for (const detection of result.detections) {
       if (!detection.categories || !detection.boundingBox) continue;
@@ -102,7 +111,11 @@ export function detectBasketball(
       }
     }
 
-    if (!bestBall || !bestBall.boundingBox) return empty;
+    if (!bestBall || !bestBall.boundingBox) {
+      return empty;
+    }
+
+    console.log('Target Locked:', bestBall.categories[0].categoryName, 'Score:', bestBall.categories[0].score);
 
     const bb = bestBall.boundingBox;
     const originX = bb.originX ?? (bb as unknown as Record<string, number>).x ?? 0;
@@ -120,7 +133,9 @@ export function detectBasketball(
     // Sanity check: diameter shouldn't be too small or too large
     const imgWidth = videoElement.videoWidth;
     const imgHeight = videoElement.videoHeight;
-    if (diameterPx < 20 || diameterPx > Math.min(imgWidth, imgHeight) * 0.4) {
+    
+    if (diameterPx < 20 || diameterPx > Math.min(imgWidth, imgHeight) * 0.8) {
+      console.warn('Object detected but failed sanity check (size):', diameterPx);
       return empty;
     }
 
@@ -135,7 +150,8 @@ export function detectBasketball(
       confidence: bestScore,
       boundingBox: { x: originX, y: originY, width, height },
     };
-  } catch {
+  } catch (err) {
+    console.error('Error in detectBasketball:', err);
     return empty;
   }
 }
