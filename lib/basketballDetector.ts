@@ -84,12 +84,13 @@ export function detectBasketball(
 
     if (!result.detections || result.detections.length === 0) return empty;
 
-    // Find "sports ball" detections
-    // COCO category names vary — check for common labels
-    const ballLabels = ['sports ball', 'ball', 'frisbee', 'bottle', 'book']; // frisbee sometimes triggers for round objects
+    // We strictly look for "sports ball" to avoid misidentifying people as bottles/books
+    const primaryLabel = 'sports ball';
+    const fallbackLabels = ['ball', 'frisbee']; 
     
     let bestBall = null;
     let bestScore = 0;
+    let isPrimary = false;
 
     // Log all raw detections for debugging
     if (result.detections.length > 0) {
@@ -104,9 +105,23 @@ export function detectBasketball(
 
       for (const category of detection.categories) {
         const name = (category.categoryName || '').toLowerCase();
-        if (ballLabels.includes(name) && (category.score ?? 0) > bestScore) {
-          bestBall = detection;
-          bestScore = category.score ?? 0;
+        const score = category.score ?? 0;
+
+        // Prioritize "sports ball" even if other labels have slightly higher scores
+        const matchesPrimary = name === primaryLabel;
+        const matchesFallback = fallbackLabels.includes(name);
+
+        if (matchesPrimary) {
+          if (!isPrimary || score > bestScore) {
+            bestBall = detection;
+            bestScore = score;
+            isPrimary = true;
+          }
+        } else if (matchesFallback && !isPrimary) {
+          if (score > bestScore) {
+            bestBall = detection;
+            bestScore = score;
+          }
         }
       }
     }
@@ -131,11 +146,14 @@ export function detectBasketball(
     const centerY = originY + height / 2;
 
     // Sanity check: diameter shouldn't be too small or too large
+    // A basketball at 2-5m distance should be between 5% and 25% of screen height
     const imgWidth = videoElement.videoWidth;
     const imgHeight = videoElement.videoHeight;
+    const minSize = Math.min(imgWidth, imgHeight) * 0.05;
+    const maxSize = Math.min(imgWidth, imgHeight) * 0.3;
     
-    if (diameterPx < 20 || diameterPx > Math.min(imgWidth, imgHeight) * 0.8) {
-      console.warn('Object detected but failed sanity check (size):', diameterPx);
+    if (diameterPx < minSize || diameterPx > maxSize) {
+      console.warn('Object detected but failed sanity check (size):', diameterPx, 'Allowed:', minSize, '-', maxSize);
       return empty;
     }
 
@@ -173,7 +191,7 @@ export class BallDetectionStabilizer {
   private samples: BallDetectionResult[] = [];
   private maxSamples: number;
 
-  constructor(maxSamples = 10) {
+  constructor(maxSamples = 20) {
     this.maxSamples = maxSamples;
   }
 

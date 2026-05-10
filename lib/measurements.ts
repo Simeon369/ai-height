@@ -169,18 +169,22 @@ export function computeMeasurements(
   const leftIndex = landmarks[LANDMARKS.LEFT_INDEX];
   const rightIndex = landmarks[LANDMARKS.RIGHT_INDEX];
 
-  // If index fingers aren't visible, fall back to wrists
-  const leftWingTip =
-    leftIndex && (leftIndex.visibility ?? 0) > 0.3
-      ? leftIndex
-      : landmarks[LANDMARKS.LEFT_WRIST];
-  const rightWingTip =
-    rightIndex && (rightIndex.visibility ?? 0) > 0.3
-      ? rightIndex
-      : landmarks[LANDMARKS.RIGHT_WRIST];
+  // If index fingers aren't visible, fall back to wrists but add an estimate for hands
+  let leftWingTip = leftIndex;
+  let rightWingTip = rightIndex;
+  let handCorrectionCm = 0;
+
+  if (!leftIndex || (leftIndex.visibility ?? 0) < 0.3) {
+    leftWingTip = landmarks[LANDMARKS.LEFT_WRIST];
+    handCorrectionCm += 18; // Average hand length in cm
+  }
+  if (!rightIndex || (rightIndex.visibility ?? 0) < 0.3) {
+    rightWingTip = landmarks[LANDMARKS.RIGHT_WRIST];
+    handCorrectionCm += 18;
+  }
 
   const wingspanPx = pixelDistance(leftWingTip, rightWingTip, imgWidth, imgHeight);
-  const wingspanCm = wingspanPx * cmPerPixel;
+  const wingspanCm = (wingspanPx * cmPerPixel) + handCorrectionCm;
 
   // --- STANDING REACH ---
   // Highest fingertip (lowest y value) when arm is raised
@@ -194,21 +198,49 @@ export function computeMeasurements(
   ];
 
   let highestY = Infinity;
+  let highestFT = fingertips[0];
   for (const ft of fingertips) {
     if (ft && (ft.visibility ?? 0) > 0.3) {
       const py = ft.y * imgHeight;
-      if (py < highestY) highestY = py;
+      if (py < highestY) {
+        highestY = py;
+        highestFT = ft;
+      }
     }
   }
 
   const standingReachPx = floorY - highestY;
-  const standingReachCm = standingReachPx * cmPerPixel;
+  let standingReachCm = standingReachPx * cmPerPixel;
+  
+  // If we only saw the wrist for the reach, add hand length
+  if (highestFT === landmarks[LANDMARKS.LEFT_WRIST] || highestFT === landmarks[LANDMARKS.RIGHT_WRIST]) {
+    standingReachCm += 18;
+  }
 
   return {
     heightCm: Math.round(heightCm * 10) / 10,
     wingspanCm: Math.round(wingspanCm * 10) / 10,
     standingReachCm: Math.round(standingReachCm * 10) / 10,
   };
+}
+
+/**
+ * Validate measurements against human biological norms.
+ */
+export function validateMeasurements(result: MeasurementResult): {
+  valid: boolean;
+  reason?: string;
+} {
+  // Height check: 100cm (3'3") to 250cm (8'2")
+  if (result.heightCm < 100) return { valid: false, reason: "Height seems too short. Check calibration." };
+  if (result.heightCm > 250) return { valid: false, reason: "Height seems too tall. Check calibration." };
+
+  // Wingspan check: Typically 0.9x to 1.2x of height
+  const ratio = result.wingspanCm / result.heightCm;
+  if (ratio < 0.7) return { valid: false, reason: "Wingspan seems too short for your height." };
+  if (ratio > 1.4) return { valid: false, reason: "Wingspan seems too long for your height." };
+
+  return { valid: true };
 }
 
 /**

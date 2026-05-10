@@ -17,7 +17,10 @@ import {
   MoveHorizontal,
   ArrowUpFromLine,
   CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
+import { validateMeasurements } from '@/lib/measurements';
 
 /**
  * Flow phases — all happen in a single continuous camera session:
@@ -151,8 +154,9 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
   const [sampleCount, setSampleCount] = useState(0);
   const [heightResult, setHeightResult] = useState<number | null>(null);
   const [wingspanResult, setWingspanResult] = useState<number | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  const stabilizer = useRef(new BallDetectionStabilizer(12));
+  const stabilizer = useRef(new BallDetectionStabilizer(15));
   const measurementSamples = useRef<MeasurementResult[]>([]);
   const latestLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
   const phaseRef = useRef(phase);
@@ -198,13 +202,21 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
               setWingspanResult(avg.wingspanCm);
               setPhase('measuring_reach');
             } else if (currentPhase === 'measuring_reach') {
-              stopDetectionLoop();
-              onComplete({
+              const finalResults = {
                 heightCm: heightResult ?? avg.heightCm,
                 wingspanCm: wingspanResult ?? avg.wingspanCm,
                 standingReachCm: avg.standingReachCm,
-              });
-              setPhase('complete');
+              };
+
+              const validation = validateMeasurements(finalResults);
+              if (!validation.valid) {
+                setValidationError(validation.reason ?? 'Measurements seem inaccurate.');
+                stopDetectionLoop();
+              } else {
+                stopDetectionLoop();
+                onComplete(finalResults);
+                setPhase('complete');
+              }
             }
           }
         }
@@ -317,6 +329,18 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
       if (frameId) cancelAnimationFrame(frameId);
     };
   }, [cameraReady, ballDetectorReady, phase]);
+
+  const handleRecalibrate = useCallback(() => {
+    setPhase('detecting_ball');
+    setCmPerPixel(0);
+    setBallPosition(null);
+    setHeightResult(null);
+    setWingspanResult(null);
+    setValidationError(null);
+    setSampleCount(0);
+    measurementSamples.current = [];
+    stabilizer.current.reset();
+  }, []);
 
   // Start pose detection once calibrated
   useEffect(() => {
@@ -537,6 +561,36 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
               >
                 Go Back
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Validation Error Overlay */}
+        {validationError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-30 px-6 text-center">
+            <div className="max-w-xs w-full bg-zinc-900 border border-amber-500/30 rounded-3xl p-8 space-y-6">
+              <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-8 h-8 text-amber-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-white text-xl font-bold">Inaccurate Reading</h3>
+                <p className="text-zinc-400 text-sm">{validationError}</p>
+              </div>
+              <div className="space-y-3">
+                <button
+                  onClick={handleRecalibrate}
+                  className="w-full py-3 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </button>
+                <button
+                  onClick={onBack}
+                  className="w-full py-3 bg-zinc-800 text-zinc-400 rounded-xl font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
