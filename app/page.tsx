@@ -74,10 +74,10 @@ export default function Home() {
           </h2>
           <div className="space-y-3">
             {[
-              { step: '1', text: 'Place a Size 7 basketball on the floor' },
-              { step: '2', text: 'Align it with the on-screen guide to calibrate' },
-              { step: '3', text: 'Stand in front of the camera for each pose' },
-              { step: '4', text: 'Get your measurements instantly' },
+              { step: '1', text: 'Place a Size 7 basketball on the floor as a reference' },
+              { step: '2', text: 'Stand by the ball until the AI locks onto it to calibrate' },
+              { step: '3', text: 'Follow the 3 guided poses: Standing, Wingspan, and Reach' },
+              { step: '4', text: 'Receive your AI-verified measurements' },
             ].map((item) => (
               <div
                 key={item.step}
