@@ -47,7 +47,7 @@ export async function initBallDetector(): Promise<void> {
         delegate: 'CPU',
       },
       runningMode: 'VIDEO',
-      scoreThreshold: 0.2,
+      scoreThreshold: 0.10,
       maxResults: 5,
     });
     console.log('ObjectDetector initialized successfully');
@@ -84,11 +84,12 @@ export function detectBasketball(
 
     if (!result.detections || result.detections.length === 0) return empty;
 
-    // COCO 80 category name for basketballs is "sports ball"
-    const targetLabels = ['sports ball'];
+    const primaryLabels = ['sports ball', 'ball'];
+    const fallbackLabels = ['frisbee', 'orange', 'apple', 'bowl', 'clock'];
     
     let bestBall = null;
     let bestScore = 0;
+    let isPrimary = false;
 
     for (const detection of result.detections) {
       if (!detection.categories || !detection.boundingBox) continue;
@@ -97,9 +98,20 @@ export function detectBasketball(
         const name = (category.categoryName || '').toLowerCase();
         const score = category.score ?? 0;
 
-        if (targetLabels.includes(name) && score > bestScore) {
-          bestBall = detection;
-          bestScore = score;
+        const matchesPrimary = primaryLabels.some((l) => name.includes(l));
+        const matchesFallback = fallbackLabels.some((l) => name.includes(l));
+
+        if (matchesPrimary) {
+          if (!isPrimary || score > bestScore) {
+            bestBall = detection;
+            bestScore = score;
+            isPrimary = true;
+          }
+        } else if (matchesFallback && !isPrimary) {
+          if (score > bestScore) {
+            bestBall = detection;
+            bestScore = score;
+          }
         }
       }
     }
@@ -114,10 +126,10 @@ export function detectBasketball(
     const width = bb.width;
     const height = bb.height;
 
-    // Check aspect ratio - a basketball should be roughly spherical (width ~ height)
+    // Aspect ratio check — width and height should be roughly proportional
     const minDim = Math.min(width, height);
     const maxDim = Math.max(width, height);
-    if (minDim / maxDim < 0.65) {
+    if (minDim / maxDim < 0.5) {
       return empty;
     }
 
@@ -128,11 +140,11 @@ export function detectBasketball(
     const centerX = originX + width / 2;
     const centerY = originY + height / 2;
 
-    // Sanity check: diameter shouldn't be too small or too large
+    // Sanity check: diameter size relative to frame
     const imgWidth = videoElement.videoWidth;
     const imgHeight = videoElement.videoHeight;
-    const minSize = Math.min(imgWidth, imgHeight) * 0.05;
-    const maxSize = Math.min(imgWidth, imgHeight) * 0.4;
+    const minSize = Math.min(imgWidth, imgHeight) * 0.03;
+    const maxSize = Math.min(imgWidth, imgHeight) * 0.5;
     
     if (diameterPx < minSize || diameterPx > maxSize) {
       return empty;
