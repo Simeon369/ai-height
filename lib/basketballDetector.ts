@@ -37,7 +37,7 @@ export async function initBallDetector(): Promise<void> {
     );
 
     const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
     );
 
     objectDetector = await ObjectDetector.createFromOptions(vision, {
