@@ -1,59 +1,91 @@
 import Link from 'next/link';
-import { Ruler, MoveHorizontal, ArrowUpFromLine, ChevronRight, Smartphone } from 'lucide-react';
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-white">
-      {/* Hero */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-16">
-        {/* Logo / Brand */}
-        <div className="mb-8 flex flex-col items-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
-            <Ruler className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-center">
-            AI Body Measure
+    <div className="flex flex-col min-h-screen" style={{ background: '#141110', color: '#F2EEE4' }}>
+      <main className="flex-1 flex flex-col px-6 pt-14 pb-10 max-w-md mx-auto w-full">
+
+        {/* Wordmark */}
+        <div className="mb-2 flex flex-col item-center w-full text-center">
+          <h1
+            className="font-tabular leading-none tracking-tight"
+            style={{ fontSize: 'clamp(3.5rem, 18vw, 5.5rem)', fontWeight: 900, color: '#F2EEE4' }}
+          >
+            Apex
           </h1>
-          <p className="text-zinc-400 text-center mt-2 max-w-xs text-sm leading-relaxed">
-            Measure your height, wingspan, and standing reach using just your phone camera
+          <p className="mt-2 text-sm leading-snug" style={{ color: '#8B8478' }}>
+            Measure like the combine does.
           </p>
         </div>
 
-        {/* Feature cards */}
-        <div className="w-full max-w-sm space-y-3 mb-10">
+        {/* Diagram */}
+        <div className="my-8 flex justify-center">
+          <svg
+            viewBox="0 0 220 320"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-full max-w-[220px]"
+            aria-label="Diagram showing a person standing next to a basketball with a height measurement line"
+          >
+            {/* Floor line */}
+            <line x1="20" y1="298" x2="200" y2="298" stroke="#2A2521" strokeWidth="1" />
+
+            {/* Height measurement line */}
+            <line x1="42" y1="28" x2="42" y2="298" stroke="#C88B3D" strokeWidth="1" strokeDasharray="3 3" />
+            {/* Top tick */}
+            <line x1="36" y1="28" x2="48" y2="28" stroke="#C88B3D" strokeWidth="1.5" />
+            {/* Bottom tick */}
+            <line x1="36" y1="298" x2="48" y2="298" stroke="#C88B3D" strokeWidth="1.5" />
+            {/* Label */}
+            <text x="28" y="168" fill="#C88B3D" fontSize="9" fontFamily="monospace" textAnchor="middle" transform="rotate(-90 28 168)">HEIGHT</text>
+
+            {/* Person — stick figure with proportions */}
+            {/* Head */}
+            <circle cx="130" cy="43" r="16" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Neck */}
+            <line x1="130" y1="59" x2="130" y2="70" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Shoulders */}
+            <line x1="104" y1="78" x2="156" y2="78" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Torso */}
+            <line x1="130" y1="78" x2="130" y2="172" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Left arm */}
+            <line x1="104" y1="78" x2="99" y2="148" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Right arm */}
+            <line x1="156" y1="78" x2="161" y2="148" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Hips */}
+            <line x1="116" y1="172" x2="144" y2="172" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Left leg */}
+            <line x1="119" y1="172" x2="113" y2="298" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Right leg */}
+            <line x1="141" y1="172" x2="147" y2="298" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+
+            {/* Basketball circle */}
+            <circle cx="178" cy="282" r="16" stroke="#F2EEE4" strokeWidth="1.2" strokeOpacity="0.5" />
+            {/* Ball seams */}
+            <path d="M163 282 Q178 275 193 282" stroke="#F2EEE4" strokeWidth="0.7" strokeOpacity="0.4" fill="none" />
+            <path d="M163 282 Q178 289 193 282" stroke="#F2EEE4" strokeWidth="0.7" strokeOpacity="0.4" fill="none" />
+            <line x1="178" y1="266" x2="178" y2="298" stroke="#F2EEE4" strokeWidth="0.7" strokeOpacity="0.4" />
+
+            {/* Head top indicator */}
+            <circle cx="130" cy="28" r="2" fill="#C88B3D" />
+            {/* Floor indicator */}
+            <circle cx="130" cy="298" r="2" fill="#C88B3D" />
+          </svg>
+        </div>
+
+        {/* Stat sheet */}
+        <div className="mb-8">
           {[
-            {
-              icon: <Ruler className="w-5 h-5" />,
-              title: 'Height',
-              desc: 'Head to toe measurement',
-              gradient: 'from-blue-500 to-cyan-400',
-            },
-            {
-              icon: <MoveHorizontal className="w-5 h-5" />,
-              title: 'Wingspan',
-              desc: 'Fingertip to fingertip span',
-              gradient: 'from-violet-500 to-purple-400',
-            },
-            {
-              icon: <ArrowUpFromLine className="w-5 h-5" />,
-              title: 'Standing Reach',
-              desc: 'Floor to raised fingertip',
-              gradient: 'from-amber-500 to-orange-400',
-            },
-          ].map((feature) => (
-            <div
-              key={feature.title}
-              className="flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800/60"
-            >
-              <div
-                className={`p-2.5 rounded-xl bg-gradient-to-br ${feature.gradient} text-white shrink-0`}
-              >
-                {feature.icon}
+            { label: 'Height', desc: 'Head-to-floor. Calibrated against a Size 7 basketball.' },
+          ].map((stat, i, arr) => (
+            <div key={stat.label}>
+              <div className="flex items-start justify-between py-3.5">
+                <span className="text-sm font-medium" style={{ color: '#F2EEE4' }}>{stat.label}</span>
+                <span className="text-sm text-right max-w-[60%] leading-snug" style={{ color: '#8B8478' }}>{stat.desc}</span>
               </div>
-              <div>
-                <p className="text-white text-sm font-semibold">{feature.title}</p>
-                <p className="text-zinc-500 text-xs">{feature.desc}</p>
-              </div>
+              {i < arr.length - 1 && (
+                <div style={{ height: '1px', background: '#2A2521' }} />
+              )}
             </div>
           ))}
         </div>
@@ -61,44 +93,49 @@ export default function Home() {
         {/* CTA */}
         <Link
           href="/measure"
-          className="w-full max-w-sm flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white text-base font-semibold transition-all hover:from-blue-500 hover:to-blue-400 active:scale-[0.98] shadow-lg shadow-blue-600/25"
+          id="start-measuring-btn"
+          className="block w-full text-center py-4 text-sm font-semibold transition-opacity active:opacity-80"
+          style={{
+            background: '#C88B3D',
+            color: '#141110',
+            borderRadius: '4px',
+          }}
         >
           Start Measuring
-          <ChevronRight className="w-5 h-5" />
         </Link>
 
         {/* How it works */}
-        <div className="w-full max-w-sm mt-10">
-          <h2 className="text-zinc-500 text-xs font-semibold uppercase tracking-widest text-center mb-4">
-            How it works
-          </h2>
-          <div className="space-y-3">
+        <div className="mt-10">
+          <p className="text-xs mb-4" style={{ color: '#8B8478' }}>How it works</p>
+          <div>
             {[
-              { step: '1', text: 'Place a Size 7 basketball on the floor as a reference' },
-              { step: '2', text: 'Stand by the ball until the AI locks onto it to calibrate' },
-              { step: '3', text: 'Follow the 3 guided poses: Standing, Wingspan, and Reach' },
-              { step: '4', text: 'Receive your AI-verified measurements' },
-            ].map((item) => (
-              <div
-                key={item.step}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-zinc-900/50 border border-zinc-800/40"
-              >
-                <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-zinc-300">{item.step}</span>
+              { step: '1', text: 'Place a Size 7 basketball on the floor where you will stand.' },
+              { step: '2', text: 'Point your camera at the ball. The app locks onto it automatically.' },
+              { step: '3', text: 'Stand straight next to the ball with your full body in frame.' },
+              { step: '4', text: 'Hold still for a few seconds. Your height is calculated and displayed.' },
+            ].map((item, i, arr) => (
+              <div key={item.step}>
+                <div className="flex items-start gap-4 py-3.5">
+                  <span
+                    className="font-tabular text-sm shrink-0 w-4 text-right"
+                    style={{ color: '#C88B3D', fontWeight: 700 }}
+                  >
+                    {item.step}
+                  </span>
+                  <p className="text-sm leading-snug" style={{ color: '#8B8478' }}>{item.text}</p>
                 </div>
-                <p className="text-zinc-300 text-sm">{item.text}</p>
+                {i < arr.length - 1 && (
+                  <div style={{ height: '1px', background: '#2A2521', marginLeft: '1.75rem' }} />
+                )}
               </div>
             ))}
           </div>
         </div>
+
       </main>
 
-      {/* Footer */}
-      <footer className="px-6 py-6 text-center border-t border-zinc-900">
-        <div className="flex items-center justify-center gap-1.5 text-zinc-600 text-xs">
-          <Smartphone className="w-3.5 h-3.5" />
-          <span>Best experienced on mobile</span>
-        </div>
+      <footer className="px-6 py-5 text-center" style={{ borderTop: '1px solid #2A2521' }}>
+        <p className="text-xs" style={{ color: '#8B8478' }}>Best experienced on mobile</p>
       </footer>
     </div>
   );

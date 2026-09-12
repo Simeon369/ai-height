@@ -8,10 +8,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AI Body Measure — Height, Wingspan & Standing Reach",
+  title: "Apex — Measure like the combine does.",
   description:
-    "Measure your height, wingspan, and standing reach from your phone using AI-powered pose detection. No equipment needed — just a basketball for calibration.",
-  keywords: ["body measurement", "height", "wingspan", "standing reach", "AI", "pose detection"],
+    "Measure your height using AI pose detection calibrated against a Size 7 basketball. Combine-style accuracy from your phone camera.",
+  keywords: ["height measurement", "body measurement", "combine", "basketball", "AI", "pose detection"],
 };
 
 export const viewport: Viewport = {
@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#09090b",
+  themeColor: "#141110",
 };
 
 export default function RootLayout({

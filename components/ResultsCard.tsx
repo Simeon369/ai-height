@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { type MeasurementResult } from '@/lib/measurements';
-import { Ruler, MoveHorizontal, ArrowUpFromLine, RotateCcw, Share2, CircleDot } from 'lucide-react';
+import { RotateCcw, Share2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ResultsCardProps {
   results: MeasurementResult;
@@ -16,169 +16,200 @@ function cmToFeetInches(cm: number): string {
   return `${feet}'${inches}"`;
 }
 
-export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
-  const measurements = [
-    {
-      label: 'Height',
-      value: results.heightCm,
-      imperial: cmToFeetInches(results.heightCm),
-      icon: <Ruler className="w-5 h-5" />,
-      color: 'from-blue-500 to-cyan-400',
-      bgColor: 'bg-blue-500/10',
-      borderColor: 'border-blue-500/20',
-    },
-    results.wingspanCm ? {
-      label: 'Wingspan',
-      value: results.wingspanCm,
-      imperial: cmToFeetInches(results.wingspanCm),
-      icon: <MoveHorizontal className="w-5 h-5" />,
-      color: 'from-violet-500 to-purple-400',
-      bgColor: 'bg-violet-500/10',
-      borderColor: 'border-violet-500/20',
-    } : null,
-    results.standingReachCm ? {
-      label: 'Standing Reach',
-      value: results.standingReachCm,
-      imperial: cmToFeetInches(results.standingReachCm),
-      icon: <ArrowUpFromLine className="w-5 h-5" />,
-      color: 'from-amber-500 to-orange-400',
-      bgColor: 'bg-amber-500/10',
-      borderColor: 'border-amber-500/20',
-    } : null,
-  ].filter(Boolean) as Array<{
-    label: string;
-    value: number;
-    imperial: string;
-    icon: React.ReactNode;
-    color: string;
-    bgColor: string;
-    borderColor: string;
-  }>;
+function useCountUp(target: number, duration = 800): number {
+  const [value, setValue] = useState(0);
+  const hasRun = useRef(false);
 
-  const wingspanToHeight = (results.heightCm > 0 && results.wingspanCm)
-    ? (results.wingspanCm / results.heightCm).toFixed(2)
+  useEffect(() => {
+    if (hasRun.current || target === 0) return;
+    hasRun.current = true;
+
+    const steps = 40;
+    const stepDuration = duration / steps;
+    let current = 0;
+    const increment = target / steps;
+
+    const timer = setInterval(() => {
+      current = Math.min(current + increment, target);
+      setValue(Math.round(current * 10) / 10);
+      if (current >= target) clearInterval(timer);
+    }, stepDuration);
+
+    return () => clearInterval(timer);
+  }, [target, duration]);
+
+  return value;
+}
+
+export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const displayHeight = useCountUp(results.heightCm);
+
+  const wingspanRatio = results.wingspanCm && results.heightCm > 0
+    ? (results.wingspanCm / results.heightCm)
     : null;
 
   const handleShare = async () => {
-    let text = `My Measurements:\n📏 Height: ${results.heightCm} cm (${cmToFeetInches(results.heightCm)})`;
-    if (results.wingspanCm) text += `\n🦅 Wingspan: ${results.wingspanCm} cm (${cmToFeetInches(results.wingspanCm)})`;
-    if (results.standingReachCm) text += `\n🙋 Standing Reach: ${results.standingReachCm} cm (${cmToFeetInches(results.standingReachCm)})`;
-    text += `\n\nMeasured with AI Body Measure`;
+    let text = `Measured with Apex\n\nHeight: ${results.heightCm} cm (${cmToFeetInches(results.heightCm)})`;
+    if (results.wingspanCm) text += `\nWingspan: ${results.wingspanCm} cm (${cmToFeetInches(results.wingspanCm)})`;
+    if (results.standingReachCm) text += `\nStanding Reach: ${results.standingReachCm} cm (${cmToFeetInches(results.standingReachCm)})`;
+    if (wingspanRatio) text += `\nWingspan ratio: ${wingspanRatio.toFixed(2)}x height`;
 
     if (navigator.share) {
-      try {
-        await navigator.share({ text });
-      } catch {
-        // User cancelled
-      }
+      try { await navigator.share({ text }); } catch { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(text);
-      alert('Results copied to clipboard!');
     }
   };
 
   return (
-    <div className="flex flex-col min-h-full bg-zinc-950">
-      {/* Header */}
-      <div className="pt-12 pb-6 px-6 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 mb-4">
-          <div className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-green-400 text-xs font-medium">Measurement Complete</span>
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-1">Your Results</h2>
-        <p className="text-zinc-400 text-sm">AI-powered body measurements</p>
-      </div>
+    <div
+      className="flex flex-col min-h-full overflow-y-auto"
+      style={{ background: '#141110', color: '#F2EEE4' }}
+    >
+      <div className="flex-1 px-6 pt-12 pb-6 max-w-md mx-auto w-full">
 
-      {/* Measurement cards */}
-      <div className="flex-1 px-4 space-y-3">
-        {measurements.map((m) => (
-          <div
-            key={m.label}
-            className={`relative overflow-hidden rounded-2xl border ${m.borderColor} ${m.bgColor} p-5`}
+        {/* Small label */}
+        <p className="text-xs mb-3" style={{ color: '#8B8478' }}>Measurement complete</p>
+
+        {/* Primary numeral readout */}
+        <div
+          className="flex items-end gap-3 mb-1"
+          style={{ borderBottom: '1px solid #2A2521', paddingBottom: '1.25rem' }}
+        >
+          <span
+            className="font-tabular leading-none"
+            style={{ fontSize: 'clamp(4rem, 22vw, 6rem)', fontWeight: 900, color: '#F2EEE4' }}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-xl bg-gradient-to-br ${m.color} text-white`}>
-                  {m.icon}
-                </div>
-                <div>
-                  <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">
-                    {m.label}
-                  </p>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-3xl font-bold text-white">{m.value}</span>
-                    <span className="text-zinc-400 text-sm">cm</span>
+            {displayHeight}
+          </span>
+          <div className="pb-2 flex gap-4 items-baseline">
+            <span className="text-sm" style={{ color: '#8B8478' }}>cm</span>
+            <span
+              className="font-tabular text-xl font-bold"
+              style={{ borderLeft: '1px solid #2A2521', paddingLeft: '1rem', color: '#8B8478' }}
+            >
+              {cmToFeetInches(results.heightCm)}
+            </span>
+          </div>
+        </div>
+
+        {/* Additional measurements (if captured) */}
+        {(results.wingspanCm || results.standingReachCm) && (
+          <div className="mt-0" style={{ borderBottom: '1px solid #2A2521' }}>
+            {results.wingspanCm && (
+              <>
+                <div className="flex items-center justify-between py-3.5">
+                  <span className="text-sm" style={{ color: '#8B8478' }}>Wingspan</span>
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-tabular font-bold text-base" style={{ color: '#F2EEE4' }}>
+                      {results.wingspanCm} cm
+                    </span>
+                    <span className="text-sm" style={{ color: '#8B8478' }}>
+                      {cmToFeetInches(results.wingspanCm)}
+                    </span>
                   </div>
                 </div>
+                <div style={{ height: '1px', background: '#2A2521' }} />
+              </>
+            )}
+            {results.standingReachCm && (
+              <div className="flex items-center justify-between py-3.5">
+                <span className="text-sm" style={{ color: '#8B8478' }}>Standing Reach</span>
+                <div className="flex items-baseline gap-3">
+                  <span className="font-tabular font-bold text-base" style={{ color: '#F2EEE4' }}>
+                    {results.standingReachCm} cm
+                  </span>
+                  <span className="text-sm" style={{ color: '#8B8478' }}>
+                    {cmToFeetInches(results.standingReachCm)}
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-lg font-semibold text-zinc-300">{m.imperial}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {/* Wingspan-to-Height ratio */}
-        {wingspanToHeight && (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">
-                  Wingspan / Height Ratio
-                </p>
-                <p className="text-zinc-500 text-xs mt-0.5">
-                  (NBA average: ~1.06)
-                </p>
-              </div>
-              <span className="text-2xl font-bold text-white">{wingspanToHeight}</span>
-            </div>
+            )}
           </div>
         )}
 
-        {/* Basketball Calibration Breakdown */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <CircleDot className="w-4 h-4 text-orange-400" />
-            <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-              Basketball Calibration Diagnostics
-            </span>
+        {/* Combine context — wingspan ratio */}
+        {wingspanRatio && (
+          <div
+            className="my-5 pl-3 py-1"
+            style={{ borderLeft: '2px solid #C88B3D' }}
+          >
+            <p className="text-sm leading-snug" style={{ color: '#F2EEE4' }}>
+              Wingspan ratio:{' '}
+              <span className="font-tabular font-bold" style={{ color: '#C88B3D' }}>
+                {wingspanRatio.toFixed(2)}×
+              </span>{' '}
+              height
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: '#8B8478' }}>
+              NBA combine average is 1.03×. Elite wingspan begins at 1.07×.
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-black/40 p-2.5 rounded-xl border border-zinc-800/50">
-              <span className="text-zinc-500 block text-[10px] uppercase">Ref. Object Size</span>
-              <span className="text-zinc-200 font-medium">24.1 cm (Size 7)</span>
+        )}
+
+        {/* Calibration diagnostics — collapsed */}
+        <div style={{ borderTop: '1px solid #2A2521', marginTop: wingspanRatio ? 0 : '1.25rem' }}>
+          <button
+            id="calibration-details-toggle"
+            onClick={() => setDetailsOpen((v) => !v)}
+            className="flex items-center justify-between w-full py-3.5 text-left"
+          >
+            <span className="text-sm" style={{ color: '#8B8478' }}>Calibration details</span>
+            {detailsOpen
+              ? <ChevronUp className="w-4 h-4" style={{ color: '#8B8478' }} />
+              : <ChevronDown className="w-4 h-4" style={{ color: '#8B8478' }} />
+            }
+          </button>
+
+          {detailsOpen && (
+            <div style={{ borderTop: '1px solid #2A2521' }}>
+              <div className="flex items-center justify-between py-3">
+                <span className="text-xs" style={{ color: '#8B8478' }}>Reference object</span>
+                <span className="font-tabular text-xs font-medium" style={{ color: '#F2EEE4' }}>Size 7 ball — 24.1 cm</span>
+              </div>
+              <div style={{ height: '1px', background: '#2A2521' }} />
+              <div className="flex items-center justify-between py-3">
+                <span className="text-xs" style={{ color: '#8B8478' }}>Detected diameter</span>
+                <span className="font-tabular text-xs font-medium" style={{ color: '#F2EEE4' }}>
+                  {results.ballDiameterPx ? `${results.ballDiameterPx} px` : '—'}
+                </span>
+              </div>
+              <div style={{ height: '1px', background: '#2A2521' }} />
+              <div className="flex items-center justify-between py-3">
+                <span className="text-xs" style={{ color: '#8B8478' }}>Scale ratio</span>
+                <span className="font-tabular text-xs font-medium" style={{ color: '#F2EEE4' }}>
+                  {results.cmPerPixel ? `${results.cmPerPixel} cm/px` : '—'}
+                </span>
+              </div>
             </div>
-            <div className="bg-black/40 p-2.5 rounded-xl border border-zinc-800/50">
-              <span className="text-zinc-500 block text-[10px] uppercase">Detected Diameter</span>
-              <span className="text-orange-400 font-mono font-bold">
-                {results.ballDiameterPx ? `${results.ballDiameterPx} px` : '—'}
-              </span>
-            </div>
-            <div className="bg-black/40 p-2.5 rounded-xl border border-zinc-800/50 col-span-2 flex justify-between items-center">
-              <span className="text-zinc-500 text-[10px] uppercase">Scale Calibration Ratio</span>
-              <span className="text-blue-400 font-mono font-bold">
-                {results.cmPerPixel ? `${results.cmPerPixel} cm/px` : '—'}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
+
       </div>
 
-      {/* Actions */}
-      <div className="px-4 py-6 space-y-3">
+      {/* Action bar */}
+      <div
+        className="px-6 py-5 flex gap-3 max-w-md mx-auto w-full"
+        style={{ borderTop: '1px solid #2A2521' }}
+      >
         <button
+          id="share-results-btn"
           onClick={handleShare}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white text-zinc-900 text-sm font-semibold transition-all hover:bg-zinc-100 active:scale-[0.98]"
+          className="flex items-center justify-center gap-2 flex-1 py-3.5 text-sm font-medium transition-opacity active:opacity-70"
+          style={{ color: '#8B8478' }}
         >
           <Share2 className="w-4 h-4" />
-          Share Results
+          Share
         </button>
         <button
+          id="retake-measurements-btn"
           onClick={onRetake}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-zinc-800 text-zinc-300 text-sm font-medium transition-colors hover:bg-zinc-700"
+          className="flex items-center justify-center gap-2 flex-1 py-3.5 text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ background: '#C88B3D', color: '#141110', borderRadius: '4px' }}
         >
           <RotateCcw className="w-4 h-4" />
-          Retake Measurements
+          Retake
         </button>
       </div>
     </div>

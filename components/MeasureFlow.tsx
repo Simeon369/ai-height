@@ -41,39 +41,30 @@ type FlowPhase =
   | 'measuring_reach'
   | 'complete';
 
-const PHASE_UI: Record<
-  FlowPhase,
-  { title: string; instruction: string; icon: React.ReactNode }
-> = {
+const PHASE_INFO: Record<FlowPhase, { title: string; instruction: string }> = {
   detecting_ball: {
-    title: 'Finding Basketball',
-    instruction: 'Place basketball on the floor where you will stand, then point camera at it',
-    icon: <CircleDot className="w-5 h-5" />,
+    title: 'Finding basketball',
+    instruction: 'Place a Size 7 basketball on the floor where you will stand, then point the camera at it.',
   },
   calibrating: {
     title: 'Calibrating',
-    instruction: 'Basketball detected! Hold steady on the floor plane...',
-    icon: <Loader2 className="w-5 h-5 animate-spin" />,
+    instruction: 'Basketball detected. Hold steady — locking in the scale reference.',
   },
   measuring_height: {
-    title: 'Measuring Height',
-    instruction: 'Stand straight next to the basketball with arms at your sides',
-    icon: <Ruler className="w-5 h-5" />,
+    title: 'Measuring height',
+    instruction: 'Stand straight next to the basketball with arms at your sides. Full body must be in frame.',
   },
   measuring_wingspan: {
-    title: 'Measuring Wingspan',
-    instruction: 'Extend both arms fully to the sides',
-    icon: <MoveHorizontal className="w-5 h-5" />,
+    title: 'Measuring wingspan',
+    instruction: 'Extend both arms fully to the sides at shoulder height.',
   },
   measuring_reach: {
-    title: 'Standing Reach',
-    instruction: 'Raise one arm straight up as high as possible',
-    icon: <ArrowUpFromLine className="w-5 h-5" />,
+    title: 'Standing reach',
+    instruction: 'Raise one arm straight up as high as you can.',
   },
   complete: {
-    title: 'Complete!',
-    instruction: 'All measurements captured',
-    icon: <CheckCircle2 className="w-5 h-5" />,
+    title: 'Complete',
+    instruction: 'Measurement captured.',
   },
 };
 
@@ -409,15 +400,35 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
       canvas.height = video.videoHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw ball detection indicator (bounding box from ML detector)
-      if (ballPosition && (phase === 'detecting_ball' || phase === 'calibrating')) {
-        const color = phase === 'calibrating' ? '#22c55e' : '#f59e0b';
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.setLineDash(phase === 'calibrating' ? [] : [8, 8]);
+      // Vertical tick-mark ruler along right edge
+      const rulerX = canvas.width - 18;
+      const numTicks = 10;
+      ctx.strokeStyle = 'rgba(242, 238, 228, 0.25)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= numTicks; i++) {
+        const y = (canvas.height / numTicks) * i;
+        const tickLen = i === 0 || i === numTicks ? 12 : 6;
+        ctx.beginPath();
+        ctx.moveTo(rulerX, y);
+        ctx.lineTo(rulerX + tickLen, y);
+        ctx.stroke();
+      }
+      // Ruler rail line
+      ctx.beginPath();
+      ctx.moveTo(rulerX, 0);
+      ctx.lineTo(rulerX, canvas.height);
+      ctx.strokeStyle = 'rgba(242, 238, 228, 0.1)';
+      ctx.stroke();
 
-        // Draw bounding box
+      // Ball detection bounding box
+      if (ballPosition && (phase === 'detecting_ball' || phase === 'calibrating')) {
+        const isLocked = phase === 'calibrating';
+        const color = isLocked ? '#E85D2C' : '#C88B3D';
         const halfD = ballPosition.d / 2;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash(isLocked ? [] : [6, 6]);
         ctx.strokeRect(
           ballPosition.x - halfD,
           ballPosition.y - halfD,
@@ -426,15 +437,14 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         );
         ctx.setLineDash([]);
 
-        // Corner accents for premium feel
-        const cornerLen = Math.min(20, halfD * 0.4);
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = color;
+        // Corner bracket accents
+        const cornerLen = Math.min(14, halfD * 0.35);
+        ctx.lineWidth = 2;
         const corners = [
-          [ballPosition.x - halfD, ballPosition.y - halfD], // top-left
-          [ballPosition.x + halfD, ballPosition.y - halfD], // top-right
-          [ballPosition.x - halfD, ballPosition.y + halfD], // bottom-left
-          [ballPosition.x + halfD, ballPosition.y + halfD], // bottom-right
+          [ballPosition.x - halfD, ballPosition.y - halfD],
+          [ballPosition.x + halfD, ballPosition.y - halfD],
+          [ballPosition.x - halfD, ballPosition.y + halfD],
+          [ballPosition.x + halfD, ballPosition.y + halfD],
         ];
         for (const [cx, cy] of corners) {
           const dirX = cx < ballPosition.x ? 1 : -1;
@@ -446,21 +456,20 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
           ctx.stroke();
         }
 
-        // Label
+        // Status label
         ctx.fillStyle = color;
-        ctx.font = `bold ${Math.max(14, canvas.width / 40)}px Inter, sans-serif`;
+        ctx.font = `500 ${Math.max(12, canvas.width / 45)}px Inter, system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(
-          phase === 'calibrating' ? '🏀 Calibrating...' : '🏀 Basketball Detected',
+          isLocked ? 'Calibrating' : 'Basketball detected',
           ballPosition.x,
-          ballPosition.y - halfD - 14
+          ballPosition.y - halfD - 10
         );
       }
 
-      // Draw skeleton during measurement phases
+      // Skeleton during measurement phases
       const landmarks = latestLandmarksRef.current;
       if (landmarks && phase.startsWith('measuring_')) {
-        // Connections
         const connections: [number, number][] = [
           [LANDMARKS.LEFT_SHOULDER, LANDMARKS.RIGHT_SHOULDER],
           [LANDMARKS.LEFT_SHOULDER, LANDMARKS.LEFT_ELBOW],
@@ -480,18 +489,18 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
           [LANDMARKS.RIGHT_ANKLE, LANDMARKS.RIGHT_HEEL],
         ];
 
-        // Color based on whether pose matches
         const expectedPose =
           phase === 'measuring_height' ? 'standing' :
           phase === 'measuring_wingspan' ? 'arms_out' :
           phase === 'measuring_reach' ? 'arm_up' : null;
 
         const poseCorrect = expectedPose === poseType;
-        const lineColor = poseCorrect ? 'rgba(34, 197, 94, 0.8)' : 'rgba(59, 130, 246, 0.6)';
-        const pointColor = poseCorrect ? 'rgba(34, 197, 94, 1)' : 'rgba(255, 255, 255, 0.8)';
+        // Accent orange when correct, muted grey when waiting
+        const lineColor = poseCorrect ? 'rgba(200, 139, 61, 0.9)' : 'rgba(242, 238, 228, 0.35)';
+        const pointColor = poseCorrect ? '#C88B3D' : 'rgba(242, 238, 228, 0.5)';
 
         ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         for (const [a, b] of connections) {
           const la = landmarks[a];
           const lb = landmarks[b];
@@ -502,13 +511,11 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
             ctx.stroke();
           }
         }
-
-        // Keypoints
         for (const lm of landmarks) {
           if ((lm.visibility ?? 0) > 0.3) {
             ctx.fillStyle = pointColor;
             ctx.beginPath();
-            ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 4, 0, Math.PI * 2);
+            ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 3, 0, Math.PI * 2);
             ctx.fill();
           }
         }
@@ -522,19 +529,16 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
     return () => cancelAnimationFrame(frameId);
   }, [cameraReady, ballPosition, phase, poseType]);
 
-  const ui = PHASE_UI[phase];
+  const phaseInfo = PHASE_INFO[phase];
   const expectedPose =
     phase === 'measuring_height' ? 'standing' :
     phase === 'measuring_wingspan' ? 'arms_out' :
     phase === 'measuring_reach' ? 'arm_up' : null;
   const poseCorrect = expectedPose ? poseType === expectedPose : false;
 
-  // Completed measurements so far
-  const completedSteps = [
-    heightResult !== null,
-    wingspanResult !== null,
-    phase === 'complete',
-  ];
+  // Dot color: confirm/orange when locked into measuring, amber when scanning
+  const isLocked = phase.startsWith('measuring_') || phase === 'complete';
+  const dotColor = isLocked ? '#E85D2C' : '#C88B3D';
 
   return (
     <div className="relative flex flex-col h-full bg-black">
@@ -556,81 +560,70 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
           }`}
         />
 
-        {/* Top Controls Bar */}
-        <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-auto">
-          <div className="w-10" /> {/* Spacer to keep phase badge centered */}
-          
-          {/* Phase badge - top center */}
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 shadow-lg">
-            {ui.icon}
-            <span className="text-white text-sm font-semibold">{ui.title}</span>
-          </div>
-
-          {/* Camera Flip Button */}
+        {/* Top Controls Bar — camera flip only */}
+        <div className="absolute top-4 right-4 z-20 pointer-events-auto">
           <button
             onClick={() =>
               setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'))
             }
-            className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all hover:bg-black/80 active:scale-95 shadow-lg"
-            title="Switch Camera (Front/Rear)"
+            className="w-10 h-10 flex items-center justify-center active:opacity-70"
+            style={{ color: '#F2EEE4' }}
+            title="Switch camera"
           >
             <SwitchCamera className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Pose status indicator */}
+        {/* Pose status — top-left text, no pill/card */}
         {expectedPose && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10">
-            <div
-              className={`px-3 py-1.5 rounded-lg backdrop-blur-sm text-xs font-medium transition-colors ${
-                poseCorrect
-                  ? 'bg-green-600/80 text-white'
-                  : 'bg-amber-600/80 text-white'
-              }`}
+          <div className="absolute top-4 left-4 z-10">
+            <p
+              className="text-xs font-medium"
+              style={{ color: poseCorrect ? '#E85D2C' : '#C88B3D' }}
             >
-              {poseCorrect ? '✓ Pose detected — capturing...' : 'Waiting for correct pose...'}
-            </div>
+              {poseCorrect ? 'Capturing' : 'Waiting for pose'}
+            </p>
           </div>
         )}
 
         {/* Loading overlay */}
-        {(!cameraReady && !cameraError) || (!ballDetectorReady && !cameraError) || (phase.startsWith('measuring_') && !isReady && !error) ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-20">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-              <p className="text-zinc-300 text-sm">
-                {!cameraReady ? 'Starting camera...' : 
-                 !ballDetectorReady ? 'Loading detection model...' : 
-                 'Finalizing AI setup...'}
+        {((!cameraReady && !cameraError) || (!ballDetectorReady && !cameraError) || (phase.startsWith('measuring_') && !isReady && !error)) && (
+          <div className="absolute inset-0 flex items-center justify-center z-20" style={{ background: 'rgba(20,17,16,0.85)' }}>
+            <div className="flex flex-col items-center gap-3 px-6 text-center">
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#C88B3D' }} />
+              <p className="text-sm" style={{ color: '#8B8478' }}>
+                {!cameraReady ? 'Starting camera' :
+                 !ballDetectorReady ? 'Loading detection model' :
+                 'Setting up AI'}
               </p>
             </div>
           </div>
-        ) : null}
+        )}
 
         {/* Camera Error Overlay */}
         {cameraError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/95 z-30 px-6 text-center">
-            <div className="max-w-xs w-full bg-zinc-900 border border-red-500/30 rounded-3xl p-6 space-y-4 shadow-xl">
-              <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
-                <AlertTriangle className="w-6 h-6 text-red-500" />
+          <div className="absolute inset-0 flex items-end z-30 px-5 pb-8" style={{ background: 'rgba(20,17,16,0.95)' }}>
+            <div className="w-full max-w-sm mx-auto">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-4 h-4" style={{ color: '#E85D2C' }} />
+                <h3 className="text-sm font-semibold" style={{ color: '#F2EEE4' }}>Camera unavailable</h3>
               </div>
-              <div className="space-y-1">
-                <h3 className="text-white text-lg font-bold">Camera Unavailable</h3>
-                <p className="text-zinc-400 text-xs leading-relaxed">{cameraError}</p>
-              </div>
-              <div className="space-y-2 pt-2">
-                <button
-                  onClick={startCamera}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Retry Camera
-                </button>
+              <p className="text-sm leading-relaxed mb-5" style={{ color: '#8B8478' }}>{cameraError}</p>
+              <div className="flex gap-3">
                 <button
                   onClick={onBack}
-                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition-colors"
+                  className="flex-1 py-3 text-sm font-medium"
+                  style={{ color: '#8B8478' }}
                 >
-                  Go Back
+                  Go back
+                </button>
+                <button
+                  onClick={startCamera}
+                  className="flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                  style={{ background: '#C88B3D', color: '#141110', borderRadius: '4px' }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry
                 </button>
               </div>
             </div>
@@ -638,43 +631,44 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         )}
 
         {(error && !cameraError) && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/90 z-20">
-            <div className="text-center px-6">
-              <p className="text-red-400 text-sm mb-3">{error}</p>
+          <div className="absolute inset-0 flex items-end z-20 px-5 pb-8" style={{ background: 'rgba(20,17,16,0.9)' }}>
+            <div className="w-full">
+              <p className="text-sm mb-4" style={{ color: '#8B8478' }}>{error}</p>
               <button
                 onClick={onBack}
-                className="px-4 py-2 rounded-lg bg-zinc-800 text-white text-sm"
+                className="py-3 px-5 text-sm font-medium"
+                style={{ color: '#8B8478' }}
               >
-                Go Back
+                Go back
               </button>
             </div>
           </div>
         )}
 
-        {/* Validation Error Overlay */}
+        {/* Validation Error */}
         {validationError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-30 px-6 text-center">
-            <div className="max-w-xs w-full bg-zinc-900 border border-amber-500/30 rounded-3xl p-8 space-y-6">
-              <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto">
-                <AlertTriangle className="w-8 h-8 text-amber-500" />
+          <div className="absolute inset-0 flex items-end z-30 px-5 pb-8" style={{ background: 'rgba(20,17,16,0.95)' }}>
+            <div className="w-full max-w-sm mx-auto">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-4 h-4" style={{ color: '#C88B3D' }} />
+                <h3 className="text-sm font-semibold" style={{ color: '#F2EEE4' }}>Inaccurate reading</h3>
               </div>
-              <div className="space-y-2">
-                <h3 className="text-white text-xl font-bold">Inaccurate Reading</h3>
-                <p className="text-zinc-400 text-sm">{validationError}</p>
-              </div>
-              <div className="space-y-3">
-                <button
-                  onClick={handleRecalibrate}
-                  className="w-full py-3 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Try Again
-                </button>
+              <p className="text-sm leading-relaxed mb-5" style={{ color: '#8B8478' }}>{validationError}</p>
+              <div className="flex gap-3">
                 <button
                   onClick={onBack}
-                  className="w-full py-3 bg-zinc-800 text-zinc-400 rounded-xl font-medium"
+                  className="flex-1 py-3 text-sm font-medium"
+                  style={{ color: '#8B8478' }}
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={handleRecalibrate}
+                  className="flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                  style={{ background: '#C88B3D', color: '#141110', borderRadius: '4px' }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Try again
                 </button>
               </div>
             </div>
@@ -682,97 +676,73 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         )}
       </div>
 
-      {/* Bottom panel */}
-      <div className="bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 px-4 py-4 space-y-3">
-        {/* Instruction */}
-        <p className="text-white text-center text-sm font-medium">{ui.instruction}</p>
-
-        {/* Progress bar for current measurement */}
-        {phase.startsWith('measuring_') && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs text-zinc-400">
-              <span>{poseCorrect ? 'Capturing...' : 'Waiting for pose...'}</span>
-              <span>{sampleCount}/{SAMPLES_NEEDED}</span>
-            </div>
-            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-200 ${
-                  poseCorrect
-                    ? 'bg-gradient-to-r from-green-600 to-green-400'
-                    : 'bg-gradient-to-r from-blue-600 to-blue-400'
-                }`}
-                style={{ width: `${(sampleCount / SAMPLES_NEEDED) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Live Basketball Calibration Status */}
-        {(ballPosition || cmPerPixel > 0) && (
-          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs">
-            <span className="text-zinc-300 font-medium flex items-center gap-1.5">
-              🏀 Calibration Ball Diameter:
-            </span>
-            <span className="text-orange-400 font-mono font-bold">
-              {ballPosition
-                ? `${Math.round(ballPosition.d)} px`
-                : cmPerPixel > 0
-                ? `${Math.round(24.1 / cmPerPixel)} px`
-                : '—'}
-              {cmPerPixel > 0 ? ` (${cmPerPixel.toFixed(4)} cm/px)` : ''}
+      {/* Bottom panel — solid dark, accent top border */}
+      <div
+        className="px-5 pt-4 pb-6 space-y-4"
+        style={{ background: '#141110', borderTop: '1px solid #C88B3D' }}
+      >
+        {/* Phase status row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: dotColor }}
+            />
+            <span className="text-sm font-medium" style={{ color: '#F2EEE4' }}>
+              {phaseInfo.title}
             </span>
           </div>
-        )}
-
-        {/* Step indicators */}
-        <div className="flex items-center justify-center gap-4">
-          {[
-            { label: 'Height Measurement', done: phase === 'complete', active: phase === 'measuring_height' },
-          ].map((step) => (
-            <div key={step.label} className="flex items-center gap-1.5">
-              <div
-                className={`w-2.5 h-2.5 rounded-full transition-all ${
-                  step.done
-                    ? 'bg-green-500'
-                    : step.active
-                    ? 'bg-blue-500 ring-2 ring-blue-500/30'
-                    : 'bg-zinc-700'
-                }`}
-              />
-              <span
-                className={`text-xs ${
-                  step.active ? 'text-white font-medium' : step.done ? 'text-green-400' : 'text-zinc-500'
-                }`}
-              >
-                {step.label}
-                {step.done && ' ✓'}
-              </span>
-            </div>
-          ))}
+          {/* Camera flip moved here on smaller row */}
         </div>
 
-        {/* Completed measurements preview */}
-        {(heightResult !== null || wingspanResult !== null) && (
-          <div className="flex gap-2">
-            {heightResult !== null && (
-              <div className="flex-1 px-3 py-2 rounded-xl bg-zinc-800/80 border border-zinc-700/50">
-                <p className="text-zinc-400 text-[10px] uppercase tracking-wider">Height</p>
-                <p className="text-white text-sm font-bold">{heightResult} cm</p>
+        {/* Instruction */}
+        <p className="text-sm leading-snug" style={{ color: '#8B8478' }}>
+          {phaseInfo.instruction}
+        </p>
+
+        {/* Segmented progress — 1 segment for height */}
+        {phase.startsWith('measuring_') && (
+          <div className="space-y-2">
+            <div className="flex gap-1.5">
+              {/* Height segment */}
+              <div className="flex-1 h-1 overflow-hidden" style={{ background: '#2A2521' }}>
+                <div
+                  className="h-full transition-all duration-200"
+                  style={{
+                    width: `${(sampleCount / SAMPLES_NEEDED) * 100}%`,
+                    background: poseCorrect ? '#C88B3D' : '#2A2521',
+                  }}
+                />
               </div>
-            )}
-            {wingspanResult !== null && (
-              <div className="flex-1 px-3 py-2 rounded-xl bg-zinc-800/80 border border-zinc-700/50">
-                <p className="text-zinc-400 text-[10px] uppercase tracking-wider">Wingspan</p>
-                <p className="text-white text-sm font-bold">{wingspanResult} cm</p>
-              </div>
-            )}
+            </div>
+            <p className="text-xs" style={{ color: '#8B8478' }}>
+              {poseCorrect
+                ? `Capturing — ${sampleCount} / ${SAMPLES_NEEDED}`
+                : 'Waiting for correct pose'}
+            </p>
           </div>
         )}
 
-        {/* Cancel button */}
+        {/* Calibration info — inline, no card */}
+        {cmPerPixel > 0 && (
+          <div
+            className="flex items-center justify-between pt-1"
+            style={{ borderTop: '1px solid #2A2521' }}
+          >
+            <span className="text-xs" style={{ color: '#8B8478' }}>Ball reference</span>
+            <span className="font-tabular text-xs" style={{ color: '#8B8478' }}>
+              {ballPosition ? Math.round(ballPosition.d) : Math.round(24.1 / cmPerPixel)} px
+              &nbsp;·&nbsp;{cmPerPixel.toFixed(4)} cm/px
+            </span>
+          </div>
+        )}
+
+        {/* Cancel */}
         <button
+          id="cancel-measure-btn"
           onClick={onBack}
-          className="w-full py-2.5 rounded-xl bg-zinc-800 text-zinc-400 text-xs font-medium transition-colors hover:bg-zinc-700 active:bg-zinc-600"
+          className="w-full py-3 text-sm font-medium transition-opacity active:opacity-70"
+          style={{ color: '#8B8478' }}
         >
           Cancel
         </button>
