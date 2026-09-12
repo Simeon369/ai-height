@@ -141,7 +141,7 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('user');
   const [phase, setPhase] = useState<FlowPhase>('detecting_ball');
   const [cmPerPixel, setCmPerPixel] = useState(0);
   const [ballPosition, setBallPosition] = useState<{ x: number; y: number; d: number } | null>(null);
