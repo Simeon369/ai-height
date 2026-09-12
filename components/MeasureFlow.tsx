@@ -711,6 +711,19 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
           </div>
         )}
 
+        {/* Live Basketball Calibration Status */}
+        {(ballPosition || cmPerPixel > 0) && (phase === 'detecting_ball' || phase === 'calibrating') && (
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs">
+            <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+              🏀 Detected Ball Diameter:
+            </span>
+            <span className="text-orange-400 font-mono font-bold">
+              {ballPosition ? `${Math.round(ballPosition.d)} px` : '—'} 
+              {cmPerPixel > 0 ? ` (${(24.1 / cmPerPixel).toFixed(0)} px)` : ''}
+            </span>
+          </div>
+        )}
+
         {/* Step indicators */}
         <div className="flex items-center justify-center gap-4">
           {[

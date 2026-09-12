@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { type MeasurementResult } from '@/lib/measurements';
-import { Ruler, MoveHorizontal, ArrowUpFromLine, RotateCcw, Share2 } from 'lucide-react';
+import { Ruler, MoveHorizontal, ArrowUpFromLine, RotateCcw, Share2, CircleDot } from 'lucide-react';
 
 interface ResultsCardProps {
   results: MeasurementResult;
@@ -119,6 +119,34 @@ export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
               </p>
             </div>
             <span className="text-2xl font-bold text-white">{wingspanToHeight}</span>
+          </div>
+        </div>
+
+        {/* Basketball Calibration Breakdown */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <CircleDot className="w-4 h-4 text-orange-400" />
+            <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+              Basketball Calibration Diagnostics
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-black/40 p-2.5 rounded-xl border border-zinc-800/50">
+              <span className="text-zinc-500 block text-[10px] uppercase">Ref. Object Size</span>
+              <span className="text-zinc-200 font-medium">24.1 cm (Size 7)</span>
+            </div>
+            <div className="bg-black/40 p-2.5 rounded-xl border border-zinc-800/50">
+              <span className="text-zinc-500 block text-[10px] uppercase">Detected Diameter</span>
+              <span className="text-orange-400 font-mono font-bold">
+                {results.ballDiameterPx ? `${results.ballDiameterPx} px` : '—'}
+              </span>
+            </div>
+            <div className="bg-black/40 p-2.5 rounded-xl border border-zinc-800/50 col-span-2 flex justify-between items-center">
+              <span className="text-zinc-500 text-[10px] uppercase">Scale Calibration Ratio</span>
+              <span className="text-blue-400 font-mono font-bold">
+                {results.cmPerPixel ? `${results.cmPerPixel} cm/px` : '—'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

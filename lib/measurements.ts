@@ -56,6 +56,8 @@ export interface MeasurementResult {
   heightCm: number;
   wingspanCm: number;
   standingReachCm: number;
+  ballDiameterPx?: number;
+  cmPerPixel?: number;
 }
 
 /** 
@@ -73,7 +75,6 @@ function pixelDistance(
   const dy = (a.y - b.y) * imgHeight;
   
   if (use3D) {
-    // MediaPipe's Z uses roughly the same scale as X
     const dz = (a.z - b.z) * imgWidth;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
@@ -91,10 +92,8 @@ function verticalPixelDistance(
 }
 
 /**
- * Estimate the top-of-head position.
- * MediaPipe doesn't give us the crown of the head directly.
- * We extrapolate upward from the midpoint between eyes by a factor
- * proportional to the face size (distance from nose to eye midpoint).
+ * Estimate the top-of-head position (crown of skull/hair).
+ * Extrapolates upward from eyes based on ear width and face unit.
  */
 function estimateTopOfHead(
   landmarks: NormalizedLandmark[],
@@ -118,12 +117,11 @@ function estimateTopOfHead(
     imgHeight
   );
 
-  // Ear-to-ear width as another reference
-  const earWidth = pixelDistance(leftEar, rightEar, imgWidth, imgHeight);
+  // Ear-to-ear width as reference
+  const earWidth = pixelDistance(leftEar, rightEar, imgWidth, imgHeight, false);
 
-  // Top of head is approximately 1.8x the nose-to-eye distance above the eye midpoint
-  // or about 0.6x ear width, whichever is larger (more robust)
-  const headExtension = Math.max(faceUnit * 1.8, earWidth * 0.55);
+  // Crown of head is approximately 0.85x ear width or 3.2x nose-to-eye distance above eye midpoint
+  const headExtension = Math.max(faceUnit * 3.2, earWidth * 0.85);
 
   return {
     x: eyeMidX * imgWidth,
@@ -133,11 +131,12 @@ function estimateTopOfHead(
 
 /**
  * Calculate the floor level from heel/foot landmarks.
- * Uses the lowest visible heel or foot index point.
+ * Adds sole padding (approx 3cm) below heel/toe keypoints to account for shoe sole.
  */
 function getFloorY(
   landmarks: NormalizedLandmark[],
-  imgHeight: number
+  imgHeight: number,
+  cmPerPixel: number
 ): number {
   const candidates = [
     landmarks[LANDMARKS.LEFT_HEEL],
@@ -153,15 +152,14 @@ function getFloorY(
       if (py > maxY) maxY = py;
     }
   }
-  return maxY;
+
+  // Add 3.0 cm of sole/ground contact padding below heel landmark
+  const soleOffsetPx = cmPerPixel > 0 ? 3.0 / cmPerPixel : 0;
+  return maxY + soleOffsetPx;
 }
 
 /**
  * Compute all three measurements from pose landmarks.
- * @param landmarks - Array of 33 normalized landmarks from MediaPipe
- * @param cmPerPixel - Calibration ratio from basketball detection
- * @param imgWidth - Video frame width in pixels
- * @param imgHeight - Video frame height in pixels
  */
 export function computeMeasurements(
   landmarks: NormalizedLandmark[],
@@ -171,14 +169,11 @@ export function computeMeasurements(
 ): MeasurementResult {
   // --- HEIGHT ---
   const topOfHead = estimateTopOfHead(landmarks, imgWidth, imgHeight);
-  const floorY = getFloorY(landmarks, imgHeight);
+  const floorY = getFloorY(landmarks, imgHeight, cmPerPixel);
   const heightPx = floorY - topOfHead.y;
   const heightCm = heightPx * cmPerPixel;
 
   // --- WINGSPAN (Segmented 3D Approach) ---
-  // Wingspan is better calculated as the sum of arm segments and shoulder width.
-  // This is more robust to perspective compression and posing errors.
-  
   const leftShoulder = landmarks[LANDMARKS.LEFT_SHOULDER];
   const rightShoulder = landmarks[LANDMARKS.RIGHT_SHOULDER];
   const leftElbow = landmarks[LANDMARKS.LEFT_ELBOW];
@@ -200,7 +195,6 @@ export function computeMeasurements(
   const rightForearmPx = pixelDistance(rightElbow, rightWrist, imgWidth, imgHeight, true);
   
   // 4. Hands (Wrist to Tip)
-  // Fall back to a constant if finger landmarks are unstable/invisible
   const HAND_LENGTH_CM = 19; // Average adult hand length
   const handLengthPx = HAND_LENGTH_CM / cmPerPixel;
 
@@ -223,7 +217,6 @@ export function computeMeasurements(
   const wingspanCm = wingspanPx * cmPerPixel;
 
   // --- STANDING REACH ---
-  // Highest fingertip (lowest y value) when arm is raised
   const fingertips = [
     landmarks[LANDMARKS.LEFT_INDEX],
     landmarks[LANDMARKS.RIGHT_INDEX],
@@ -248,7 +241,6 @@ export function computeMeasurements(
   const standingReachPx = floorY - highestY;
   let standingReachCm = standingReachPx * cmPerPixel;
   
-  // If we only saw the wrist for the reach, add hand length
   if (highestFT === landmarks[LANDMARKS.LEFT_WRIST] || highestFT === landmarks[LANDMARKS.RIGHT_WRIST]) {
     standingReachCm += 18;
   }
@@ -257,6 +249,8 @@ export function computeMeasurements(
     heightCm: Math.round(heightCm * 10) / 10,
     wingspanCm: Math.round(wingspanCm * 10) / 10,
     standingReachCm: Math.round(standingReachCm * 10) / 10,
+    cmPerPixel: Math.round(cmPerPixel * 10000) / 10000,
+    ballDiameterPx: Math.round(BASKETBALL_DIAMETER_CM / cmPerPixel),
   };
 }
 
@@ -267,11 +261,11 @@ export function validateMeasurements(result: MeasurementResult): {
   valid: boolean;
   reason?: string;
 } {
-  // Height check: 100cm (3'3") to 250cm (8'2")
-  if (result.heightCm < 100) return { valid: false, reason: "Height seems too short. Check calibration." };
-  if (result.heightCm > 250) return { valid: false, reason: "Height seems too tall. Check calibration." };
+  // Height check: 100cm to 250cm
+  if (result.heightCm < 100) return { valid: false, reason: "Height seems too short. Check basketball calibration." };
+  if (result.heightCm > 250) return { valid: false, reason: "Height seems too tall. Check basketball calibration." };
 
-  // Wingspan check: Typically 0.9x to 1.2x of height
+  // Wingspan check: Typically 0.8x to 1.35x of height
   const ratio = result.wingspanCm / result.heightCm;
   if (ratio < 0.7) return { valid: false, reason: "Wingspan seems too short for your height." };
   if (ratio > 1.4) return { valid: false, reason: "Wingspan seems too long for your height." };
@@ -289,13 +283,21 @@ export function averageMeasurements(
     return { heightCm: 0, wingspanCm: 0, standingReachCm: 0 };
   }
 
-  const sum = samples.reduce(
+  const sum = samples.reduce<{
+    heightCm: number;
+    wingspanCm: number;
+    standingReachCm: number;
+    cmPerPixel: number;
+    ballDiameterPx: number;
+  }>(
     (acc, s) => ({
       heightCm: acc.heightCm + s.heightCm,
       wingspanCm: acc.wingspanCm + s.wingspanCm,
       standingReachCm: acc.standingReachCm + s.standingReachCm,
+      cmPerPixel: acc.cmPerPixel + (s.cmPerPixel ?? 0),
+      ballDiameterPx: acc.ballDiameterPx + (s.ballDiameterPx ?? 0),
     }),
-    { heightCm: 0, wingspanCm: 0, standingReachCm: 0 }
+    { heightCm: 0, wingspanCm: 0, standingReachCm: 0, cmPerPixel: 0, ballDiameterPx: 0 }
   );
 
   const n = samples.length;
@@ -303,6 +305,8 @@ export function averageMeasurements(
     heightCm: Math.round((sum.heightCm / n) * 10) / 10,
     wingspanCm: Math.round((sum.wingspanCm / n) * 10) / 10,
     standingReachCm: Math.round((sum.standingReachCm / n) * 10) / 10,
+    cmPerPixel: Math.round((sum.cmPerPixel / n) * 10000) / 10000,
+    ballDiameterPx: Math.round(sum.ballDiameterPx / n),
   };
 }
 
