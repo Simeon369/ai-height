@@ -47,7 +47,7 @@ export async function initBallDetector(): Promise<void> {
         delegate: 'CPU',
       },
       runningMode: 'VIDEO',
-      scoreThreshold: 0.10,
+      scoreThreshold: 0.25,
       maxResults: 5,
     });
     console.log('ObjectDetector initialized successfully');
@@ -84,12 +84,10 @@ export function detectBasketball(
 
     if (!result.detections || result.detections.length === 0) return empty;
 
-    const primaryLabels = ['sports ball', 'ball'];
-    const fallbackLabels = ['frisbee', 'orange', 'apple', 'bowl', 'clock'];
+    const validBallLabels = ['sports ball', 'ball', 'basketball'];
     
     let bestBall = null;
     let bestScore = 0;
-    let isPrimary = false;
 
     for (const detection of result.detections) {
       if (!detection.categories || !detection.boundingBox) continue;
@@ -98,20 +96,11 @@ export function detectBasketball(
         const name = (category.categoryName || '').toLowerCase();
         const score = category.score ?? 0;
 
-        const matchesPrimary = primaryLabels.some((l) => name.includes(l));
-        const matchesFallback = fallbackLabels.some((l) => name.includes(l));
+        const matchesBall = validBallLabels.some((l) => name.includes(l));
 
-        if (matchesPrimary) {
-          if (!isPrimary || score > bestScore) {
-            bestBall = detection;
-            bestScore = score;
-            isPrimary = true;
-          }
-        } else if (matchesFallback && !isPrimary) {
-          if (score > bestScore) {
-            bestBall = detection;
-            bestScore = score;
-          }
+        if (matchesBall && score > bestScore) {
+          bestBall = detection;
+          bestScore = score;
         }
       }
     }
@@ -126,10 +115,10 @@ export function detectBasketball(
     const width = bb.width;
     const height = bb.height;
 
-    // Aspect ratio check — width and height should be roughly proportional
+    // Aspect ratio check — a spherical ball must be roughly circular (aspect ratio > 0.70)
     const minDim = Math.min(width, height);
     const maxDim = Math.max(width, height);
-    if (minDim / maxDim < 0.5) {
+    if (minDim / maxDim < 0.70) {
       return empty;
     }
 
@@ -185,7 +174,7 @@ export class BallDetectionStabilizer {
   private maxSamples: number;
   private missedFrames: number = 0;
 
-  constructor(maxSamples = 10) {
+  constructor(maxSamples = 15) {
     this.maxSamples = maxSamples;
   }
 
@@ -209,7 +198,7 @@ export class BallDetectionStabilizer {
   }
 
   isStable(): boolean {
-    return this.samples.length >= 6; // Requires 6 valid samples (~0.3s)
+    return this.samples.length >= 10; // Requires 10 valid samples (~0.5s)
   }
 
   getStableResult(): BallDetectionResult | null {
@@ -221,13 +210,13 @@ export class BallDetectionStabilizer {
     const avgCenterY = this.samples.reduce((s, r) => s + r.centerY, 0) / n;
     const avgConfidence = this.samples.reduce((s, r) => s + r.confidence, 0) / n;
 
-    // Check consistency — diameter variation threshold < 0.25
+    // Check consistency — diameter variation threshold < 0.15
     const diameterStdDev = Math.sqrt(
       this.samples.reduce((s, r) => s + (r.diameterPx - avgDiameter) ** 2, 0) / n
     );
     const coeffOfVariation = diameterStdDev / avgDiameter;
 
-    if (coeffOfVariation > 0.25) return null; // Too unstable
+    if (coeffOfVariation > 0.15) return null; // Too unstable
 
     return {
       found: true,

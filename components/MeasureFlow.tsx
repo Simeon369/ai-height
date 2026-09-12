@@ -9,6 +9,7 @@ import {
   type NormalizedLandmark,
   type MeasurementResult,
   LANDMARKS,
+  BASKETBALL_DIAMETER_CM,
 } from '@/lib/measurements';
 import {
   Loader2,
@@ -205,10 +206,12 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
               setWingspanResult(avg.wingspanCm);
               setPhase('measuring_reach');
             } else if (currentPhase === 'measuring_reach') {
-              const finalResults = {
+              const finalResults: MeasurementResult = {
                 heightCm: heightResult ?? avg.heightCm,
                 wingspanCm: wingspanResult ?? avg.wingspanCm,
                 standingReachCm: avg.standingReachCm,
+                cmPerPixel: Math.round(cmPerPixel * 10000) / 10000,
+                ballDiameterPx: cmPerPixel > 0 ? Math.round(BASKETBALL_DIAMETER_CM / cmPerPixel) : 0,
               };
 
               const validation = validateMeasurements(finalResults);
@@ -712,14 +715,18 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         )}
 
         {/* Live Basketball Calibration Status */}
-        {(ballPosition || cmPerPixel > 0) && (phase === 'detecting_ball' || phase === 'calibrating') && (
+        {(ballPosition || cmPerPixel > 0) && (
           <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs">
             <span className="text-zinc-300 font-medium flex items-center gap-1.5">
-              🏀 Detected Ball Diameter:
+              🏀 Calibration Ball Diameter:
             </span>
             <span className="text-orange-400 font-mono font-bold">
-              {ballPosition ? `${Math.round(ballPosition.d)} px` : '—'} 
-              {cmPerPixel > 0 ? ` (${(24.1 / cmPerPixel).toFixed(0)} px)` : ''}
+              {ballPosition
+                ? `${Math.round(ballPosition.d)} px`
+                : cmPerPixel > 0
+                ? `${Math.round(24.1 / cmPerPixel)} px`
+                : '—'}
+              {cmPerPixel > 0 ? ` (${cmPerPixel.toFixed(4)} cm/px)` : ''}
             </span>
           </div>
         )}
