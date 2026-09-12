@@ -54,8 +54,8 @@ export interface NormalizedLandmark {
 
 export interface MeasurementResult {
   heightCm: number;
-  wingspanCm: number;
-  standingReachCm: number;
+  wingspanCm?: number;
+  standingReachCm?: number;
   ballDiameterPx?: number;
   cmPerPixel?: number;
 }
@@ -266,9 +266,11 @@ export function validateMeasurements(result: MeasurementResult): {
   if (result.heightCm > 250) return { valid: false, reason: "Height seems too tall. Check basketball calibration." };
 
   // Wingspan check: Typically 0.8x to 1.35x of height
-  const ratio = result.wingspanCm / result.heightCm;
-  if (ratio < 0.7) return { valid: false, reason: "Wingspan seems too short for your height." };
-  if (ratio > 1.4) return { valid: false, reason: "Wingspan seems too long for your height." };
+  if (result.wingspanCm !== undefined) {
+    const ratio = result.wingspanCm / result.heightCm;
+    if (ratio < 0.7) return { valid: false, reason: "Wingspan seems too short for your height." };
+    if (ratio > 1.4) return { valid: false, reason: "Wingspan seems too long for your height." };
+  }
 
   return { valid: true };
 }
@@ -292,8 +294,8 @@ export function averageMeasurements(
   }>(
     (acc, s) => ({
       heightCm: acc.heightCm + s.heightCm,
-      wingspanCm: acc.wingspanCm + s.wingspanCm,
-      standingReachCm: acc.standingReachCm + s.standingReachCm,
+      wingspanCm: acc.wingspanCm + (s.wingspanCm ?? 0),
+      standingReachCm: acc.standingReachCm + (s.standingReachCm ?? 0),
       cmPerPixel: acc.cmPerPixel + (s.cmPerPixel ?? 0),
       ballDiameterPx: acc.ballDiameterPx + (s.ballDiameterPx ?? 0),
     }),
