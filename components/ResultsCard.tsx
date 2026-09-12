@@ -64,22 +64,22 @@ export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
 
   return (
     <div
-      className="flex flex-col min-h-full overflow-y-auto"
+      className="flex flex-col h-full w-full"
       style={{ background: '#141110', color: '#F2EEE4' }}
     >
-      <div className="flex-1 px-6 pt-12 pb-6 max-w-md mx-auto w-full">
+      <div className="flex-1 flex flex-col justify-center px-6 py-4 max-w-md mx-auto w-full">
 
         {/* Small label */}
-        <p className="text-xs mb-3" style={{ color: '#8B8478' }}>Measurement complete</p>
+        <p className="text-xs mb-2" style={{ color: '#8B8478' }}>Measurement complete</p>
 
         {/* Primary numeral readout */}
         <div
-          className="flex items-end gap-3 mb-1"
-          style={{ borderBottom: '1px solid #2A2521', paddingBottom: '1.25rem' }}
+          className="flex w-full items-end gap-3 mb-1"
+          style={{ borderBottom: '1px solid #2A2521', paddingBottom: '1rem' }}
         >
           <span
             className="font-tabular leading-none"
-            style={{ fontSize: 'clamp(4rem, 22vw, 6rem)', fontWeight: 900, color: '#F2EEE4' }}
+            style={{ fontSize: 'clamp(3.5rem, 18vw, 5rem)', fontWeight: 900, color: '#F2EEE4' }}
           >
             {displayHeight}
           </span>
