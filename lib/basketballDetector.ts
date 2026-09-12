@@ -181,7 +181,7 @@ export class BallDetectionStabilizer {
   addSample(result: BallDetectionResult): void {
     if (!result.found) {
       this.missedFrames++;
-      if (this.missedFrames > 10) {
+      if (this.missedFrames > 20) { // Increased from 10 to 20 to allow more flickers
         this.reset();
       }
       return;
@@ -198,7 +198,7 @@ export class BallDetectionStabilizer {
   }
 
   isStable(): boolean {
-    return this.samples.length >= 10; // Requires 10 valid samples (~0.5s)
+    return this.samples.length >= 6; // Reduced from 10 to 6
   }
 
   getStableResult(): BallDetectionResult | null {
@@ -210,13 +210,13 @@ export class BallDetectionStabilizer {
     const avgCenterY = this.samples.reduce((s, r) => s + r.centerY, 0) / n;
     const avgConfidence = this.samples.reduce((s, r) => s + r.confidence, 0) / n;
 
-    // Check consistency — diameter variation threshold < 0.15
+    // Check consistency — diameter variation threshold < 0.25
     const diameterStdDev = Math.sqrt(
       this.samples.reduce((s, r) => s + (r.diameterPx - avgDiameter) ** 2, 0) / n
     );
     const coeffOfVariation = diameterStdDev / avgDiameter;
 
-    if (coeffOfVariation > 0.15) return null; // Too unstable
+    if (coeffOfVariation > 0.25) return null; // Relaxed from 0.15 to 0.25
 
     return {
       found: true,
