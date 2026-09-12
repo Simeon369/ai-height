@@ -47,7 +47,7 @@ export async function initBallDetector(): Promise<void> {
         delegate: 'CPU',
       },
       runningMode: 'VIDEO',
-      scoreThreshold: 0.15,
+      scoreThreshold: 0.2,
       maxResults: 5,
     });
     console.log('ObjectDetector initialized successfully');
@@ -84,21 +84,11 @@ export function detectBasketball(
 
     if (!result.detections || result.detections.length === 0) return empty;
 
-    // We strictly look for "sports ball" to avoid misidentifying people as bottles/books
-    const primaryLabel = 'sports ball';
-    const fallbackLabels = ['ball', 'frisbee']; 
+    // COCO 80 category name for basketballs is "sports ball"
+    const targetLabels = ['sports ball'];
     
     let bestBall = null;
     let bestScore = 0;
-    let isPrimary = false;
-
-    // Log all raw detections for debugging
-    if (result.detections.length > 0) {
-      const labels = result.detections.flatMap(d => d.categories.map(c => `${c.categoryName}(${Math.round((c.score??0)*100)}%)`));
-      console.log('AI Sees:', labels.join(', '));
-    } else {
-      // console.log('AI is looking but sees nothing...'); // Un-comment if you want to spam console to prove it's running
-    }
 
     for (const detection of result.detections) {
       if (!detection.categories || !detection.boundingBox) continue;
@@ -107,21 +97,9 @@ export function detectBasketball(
         const name = (category.categoryName || '').toLowerCase();
         const score = category.score ?? 0;
 
-        // Prioritize "sports ball" even if other labels have slightly higher scores
-        const matchesPrimary = name === primaryLabel;
-        const matchesFallback = fallbackLabels.includes(name);
-
-        if (matchesPrimary) {
-          if (!isPrimary || score > bestScore) {
-            bestBall = detection;
-            bestScore = score;
-            isPrimary = true;
-          }
-        } else if (matchesFallback && !isPrimary) {
-          if (score > bestScore) {
-            bestBall = detection;
-            bestScore = score;
-          }
+        if (targetLabels.includes(name) && score > bestScore) {
+          bestBall = detection;
+          bestScore = score;
         }
       }
     }
@@ -130,13 +108,18 @@ export function detectBasketball(
       return empty;
     }
 
-    console.log('Target Locked:', bestBall.categories[0].categoryName, 'Score:', bestBall.categories[0].score);
-
     const bb = bestBall.boundingBox;
     const originX = bb.originX ?? (bb as unknown as Record<string, number>).x ?? 0;
     const originY = bb.originY ?? (bb as unknown as Record<string, number>).y ?? 0;
     const width = bb.width;
     const height = bb.height;
+
+    // Check aspect ratio - a basketball should be roughly spherical (width ~ height)
+    const minDim = Math.min(width, height);
+    const maxDim = Math.max(width, height);
+    if (minDim / maxDim < 0.65) {
+      return empty;
+    }
 
     // Estimate diameter as average of bbox width and height
     const diameterPx = (width + height) / 2;
@@ -146,14 +129,12 @@ export function detectBasketball(
     const centerY = originY + height / 2;
 
     // Sanity check: diameter shouldn't be too small or too large
-    // A basketball at 2-5m distance should be between 5% and 25% of screen height
     const imgWidth = videoElement.videoWidth;
     const imgHeight = videoElement.videoHeight;
     const minSize = Math.min(imgWidth, imgHeight) * 0.05;
-    const maxSize = Math.min(imgWidth, imgHeight) * 0.3;
+    const maxSize = Math.min(imgWidth, imgHeight) * 0.4;
     
     if (diameterPx < minSize || diameterPx > maxSize) {
-      console.warn('Object detected but failed sanity check (size):', diameterPx, 'Allowed:', minSize, '-', maxSize);
       return empty;
     }
 

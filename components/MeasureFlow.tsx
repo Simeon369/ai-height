@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
+  SwitchCamera,
 } from 'lucide-react';
 import { validateMeasurements } from '@/lib/measurements';
 
@@ -45,17 +46,17 @@ const PHASE_UI: Record<
 > = {
   detecting_ball: {
     title: 'Finding Basketball',
-    instruction: 'Point the camera at a basketball (or exercise book for testing)',
+    instruction: 'Place basketball on the floor where you will stand, then point camera at it',
     icon: <CircleDot className="w-5 h-5" />,
   },
   calibrating: {
     title: 'Calibrating',
-    instruction: 'Basketball detected! Hold the camera steady...',
+    instruction: 'Basketball detected! Hold steady on the floor plane...',
     icon: <Loader2 className="w-5 h-5 animate-spin" />,
   },
   measuring_height: {
     title: 'Measuring Height',
-    instruction: 'Stand straight with arms at your sides',
+    instruction: 'Stand straight next to the basketball with arms at your sides',
     icon: <Ruler className="w-5 h-5" />,
   },
   measuring_wingspan: {
@@ -147,6 +148,8 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
   const [ballDetectorReady, setBallDetectorReady] = useState(false);
 
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [phase, setPhase] = useState<FlowPhase>('detecting_ball');
   const [cmPerPixel, setCmPerPixel] = useState(0);
   const [ballPosition, setBallPosition] = useState<{ x: number; y: number; d: number } | null>(null);
@@ -223,46 +226,80 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
       },
     });
 
-  // Start camera (back-facing)
-  useEffect(() => {
-    let mounted = true;
+  // Start camera (toggleable facing mode with robust constraint fallbacks)
+  const startCamera = useCallback(async () => {
+    setCameraReady(false);
+    setCameraError(null);
 
-    async function startCamera() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    if (typeof window !== 'undefined' && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)) {
+      setCameraError('Camera access requires a Secure Context (HTTPS or localhost). If testing on a mobile device, please access via HTTPS or use localhost.');
+      return;
+    }
+
+    // Array of constraint strategies to try in order of preference
+    const constraintList: MediaStreamConstraints[] = [
+      {
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      },
+      {
+        video: { facingMode: { ideal: facingMode } },
+        audio: false,
+      },
+      {
+        video: true,
+        audio: false,
+      },
+    ];
+
+    let stream: MediaStream | null = null;
+    let lastErr: unknown = null;
+
+    for (const constraints of constraintList) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
-          audio: false,
-        });
-
-        if (!mounted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play();
-            setCameraReady(true);
-          };
-        }
-
-        // Initialize ball detector first (critical for calibration)
-        await initBallDetector();
-        setBallDetectorReady(true);
-        
-        // Start loading pose detection in background (not awaited)
-        initialize();
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream) break;
       } catch (err) {
-        console.error('Camera setup failed:', err);
+        lastErr = err;
       }
     }
 
+    if (!stream) {
+      console.error('All camera constraint attempts failed:', lastErr);
+      const errMsg = lastErr instanceof Error ? lastErr.message : 'Camera access denied or device unavailable.';
+      setCameraError(errMsg);
+      return;
+    }
+
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch((e) => console.error('Play error:', e));
+        setCameraReady(true);
+      };
+    }
+
+    try {
+      await initBallDetector();
+      setBallDetectorReady(true);
+      initialize();
+    } catch (err) {
+      console.error('Model initialization error:', err);
+    }
+  }, [facingMode, initialize]);
+
+  useEffect(() => {
+    let mounted = true;
     startCamera();
 
     return () => {
@@ -275,7 +312,7 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [facingMode]);
 
   // Basketball detection loop (runs during detecting_ball and calibrating phases)
   useEffect(() => {
@@ -503,23 +540,40 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
       <div className="relative flex-1 overflow-hidden">
         <video
           ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          className={`absolute inset-0 w-full h-full object-cover z-0 ${
+            facingMode === 'user' ? '-scale-x-100' : ''
+          }`}
           autoPlay
           playsInline
           muted
         />
         <canvas
           ref={overlayCanvasRef}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"
+          className={`absolute inset-0 w-full h-full object-cover pointer-events-none z-10 ${
+            facingMode === 'user' ? '-scale-x-100' : ''
+          }`}
         />
 
-
-        {/* Phase badge - top center */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10">
+        {/* Top Controls Bar */}
+        <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-auto">
+          <div className="w-10" /> {/* Spacer to keep phase badge centered */}
+          
+          {/* Phase badge - top center */}
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 shadow-lg">
             {ui.icon}
             <span className="text-white text-sm font-semibold">{ui.title}</span>
           </div>
+
+          {/* Camera Flip Button */}
+          <button
+            onClick={() =>
+              setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'))
+            }
+            className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all hover:bg-black/80 active:scale-95 shadow-lg"
+            title="Switch Camera (Front/Rear)"
+          >
+            <SwitchCamera className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Pose status indicator */}
@@ -538,7 +592,7 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         )}
 
         {/* Loading overlay */}
-        {(!cameraReady || !ballDetectorReady || (phase.startsWith('measuring_') && !isReady)) && (
+        {(!cameraReady && !cameraError) || (!ballDetectorReady && !cameraError) || (phase.startsWith('measuring_') && !isReady && !error) ? (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-20">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -549,9 +603,39 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
               </p>
             </div>
           </div>
+        ) : null}
+
+        {/* Camera Error Overlay */}
+        {cameraError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/95 z-30 px-6 text-center">
+            <div className="max-w-xs w-full bg-zinc-900 border border-red-500/30 rounded-3xl p-6 space-y-4 shadow-xl">
+              <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-white text-lg font-bold">Camera Unavailable</h3>
+                <p className="text-zinc-400 text-xs leading-relaxed">{cameraError}</p>
+              </div>
+              <div className="space-y-2 pt-2">
+                <button
+                  onClick={startCamera}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Retry Camera
+                </button>
+                <button
+                  onClick={onBack}
+                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition-colors"
+                >
+                  Go Back
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
-        {error && (
+        {(error && !cameraError) && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/90 z-20">
             <div className="text-center px-6">
               <p className="text-red-400 text-sm mb-3">{error}</p>

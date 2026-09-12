@@ -58,15 +58,26 @@ export interface MeasurementResult {
   standingReachCm: number;
 }
 
-/** Euclidean distance between two landmarks in pixel space */
+/** 
+ * Euclidean distance between two landmarks.
+ * @param use3D - If true, incorporates the Z-axis (depth) for better accuracy
+ */
 function pixelDistance(
   a: NormalizedLandmark,
   b: NormalizedLandmark,
   imgWidth: number,
-  imgHeight: number
+  imgHeight: number,
+  use3D: boolean = true
 ): number {
   const dx = (a.x - b.x) * imgWidth;
   const dy = (a.y - b.y) * imgHeight;
+  
+  if (use3D) {
+    // MediaPipe's Z uses roughly the same scale as X
+    const dz = (a.z - b.z) * imgWidth;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+  
   return Math.sqrt(dx * dx + dy * dy);
 }
 
@@ -164,27 +175,52 @@ export function computeMeasurements(
   const heightPx = floorY - topOfHead.y;
   const heightCm = heightPx * cmPerPixel;
 
-  // --- WINGSPAN ---
-  // Use index finger tips for maximum reach
+  // --- WINGSPAN (Segmented 3D Approach) ---
+  // Wingspan is better calculated as the sum of arm segments and shoulder width.
+  // This is more robust to perspective compression and posing errors.
+  
+  const leftShoulder = landmarks[LANDMARKS.LEFT_SHOULDER];
+  const rightShoulder = landmarks[LANDMARKS.RIGHT_SHOULDER];
+  const leftElbow = landmarks[LANDMARKS.LEFT_ELBOW];
+  const rightElbow = landmarks[LANDMARKS.RIGHT_ELBOW];
+  const leftWrist = landmarks[LANDMARKS.LEFT_WRIST];
+  const rightWrist = landmarks[LANDMARKS.RIGHT_WRIST];
   const leftIndex = landmarks[LANDMARKS.LEFT_INDEX];
   const rightIndex = landmarks[LANDMARKS.RIGHT_INDEX];
 
-  // If index fingers aren't visible, fall back to wrists but add an estimate for hands
-  let leftWingTip = leftIndex;
-  let rightWingTip = rightIndex;
-  let handCorrectionCm = 0;
+  // 1. Shoulder to Shoulder
+  const shoulderWidthPx = pixelDistance(leftShoulder, rightShoulder, imgWidth, imgHeight, true);
+  
+  // 2. Upper Arms (Shoulder to Elbow)
+  const leftUpperArmPx = pixelDistance(leftShoulder, leftElbow, imgWidth, imgHeight, true);
+  const rightUpperArmPx = pixelDistance(rightShoulder, rightElbow, imgWidth, imgHeight, true);
+  
+  // 3. Forearms (Elbow to Wrist)
+  const leftForearmPx = pixelDistance(leftElbow, leftWrist, imgWidth, imgHeight, true);
+  const rightForearmPx = pixelDistance(rightElbow, rightWrist, imgWidth, imgHeight, true);
+  
+  // 4. Hands (Wrist to Tip)
+  // Fall back to a constant if finger landmarks are unstable/invisible
+  const HAND_LENGTH_CM = 19; // Average adult hand length
+  const handLengthPx = HAND_LENGTH_CM / cmPerPixel;
 
-  if (!leftIndex || (leftIndex.visibility ?? 0) < 0.3) {
-    leftWingTip = landmarks[LANDMARKS.LEFT_WRIST];
-    handCorrectionCm += 18; // Average hand length in cm
-  }
-  if (!rightIndex || (rightIndex.visibility ?? 0) < 0.3) {
-    rightWingTip = landmarks[LANDMARKS.RIGHT_WRIST];
-    handCorrectionCm += 18;
-  }
+  const getHandPx = (wrist: NormalizedLandmark, index: NormalizedLandmark) => {
+    if (index && (index.visibility ?? 0) > 0.4) {
+      return pixelDistance(wrist, index, imgWidth, imgHeight, true);
+    }
+    return handLengthPx;
+  };
 
-  const wingspanPx = pixelDistance(leftWingTip, rightWingTip, imgWidth, imgHeight);
-  const wingspanCm = (wingspanPx * cmPerPixel) + handCorrectionCm;
+  const leftHandPx = getHandPx(leftWrist, leftIndex);
+  const rightHandPx = getHandPx(rightWrist, rightIndex);
+
+  const wingspanPx = 
+    shoulderWidthPx + 
+    leftUpperArmPx + rightUpperArmPx + 
+    leftForearmPx + rightForearmPx + 
+    leftHandPx + rightHandPx;
+
+  const wingspanCm = wingspanPx * cmPerPixel;
 
   // --- STANDING REACH ---
   // Highest fingertip (lowest y value) when arm is raised
