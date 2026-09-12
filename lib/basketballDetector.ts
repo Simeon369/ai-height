@@ -171,21 +171,33 @@ export function closeBallDetector(): void {
 export class BallDetectionStabilizer {
   private samples: BallDetectionResult[] = [];
   private maxSamples: number;
+  private missedFrames: number = 0;
 
-  constructor(maxSamples = 20) {
+  constructor(maxSamples = 10) {
     this.maxSamples = maxSamples;
   }
 
   addSample(result: BallDetectionResult): void {
-    if (!result.found) return;
+    if (!result.found) {
+      this.missedFrames++;
+      if (this.missedFrames > 10) {
+        this.reset();
+      }
+      return;
+    }
+    this.missedFrames = 0;
     this.samples.push(result);
     if (this.samples.length > this.maxSamples) {
       this.samples.shift();
     }
   }
 
+  getMissedFrames(): number {
+    return this.missedFrames;
+  }
+
   isStable(): boolean {
-    return this.samples.length >= this.maxSamples * 0.7;
+    return this.samples.length >= 6; // Requires 6 valid samples (~0.3s)
   }
 
   getStableResult(): BallDetectionResult | null {
@@ -197,13 +209,13 @@ export class BallDetectionStabilizer {
     const avgCenterY = this.samples.reduce((s, r) => s + r.centerY, 0) / n;
     const avgConfidence = this.samples.reduce((s, r) => s + r.confidence, 0) / n;
 
-    // Check consistency — diameter shouldn't vary too much
+    // Check consistency — diameter variation threshold < 0.25
     const diameterStdDev = Math.sqrt(
       this.samples.reduce((s, r) => s + (r.diameterPx - avgDiameter) ** 2, 0) / n
     );
     const coeffOfVariation = diameterStdDev / avgDiameter;
 
-    if (coeffOfVariation > 0.2) return null; // Too unstable
+    if (coeffOfVariation > 0.25) return null; // Too unstable
 
     return {
       found: true,
@@ -218,5 +230,6 @@ export class BallDetectionStabilizer {
 
   reset(): void {
     this.samples = [];
+    this.missedFrames = 0;
   }
 }

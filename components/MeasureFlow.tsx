@@ -317,13 +317,18 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
   // Basketball detection loop (runs during detecting_ball and calibrating phases)
   useEffect(() => {
     if (!cameraReady || !ballDetectorReady || !videoRef.current) return;
-    if (phase !== 'detecting_ball' && phase !== 'calibrating') return;
 
     let frameId: number;
     let lastDetectionTime = -1;
 
     const detect = () => {
       if (!videoRef.current) return;
+      const currentPhase = phaseRef.current;
+
+      // Only run detection while in detecting_ball or calibrating phase
+      if (currentPhase !== 'detecting_ball' && currentPhase !== 'calibrating') {
+        return;
+      }
 
       const now = performance.now();
       // MediaPipe requires strictly increasing timestamps
@@ -339,21 +344,22 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         setBallPosition({ x: result.centerX, y: result.centerY, d: result.diameterPx });
         stabilizer.current.addSample(result);
 
-        if (phase === 'detecting_ball') {
+        if (currentPhase === 'detecting_ball') {
           setPhase('calibrating');
         }
 
         const stable = stabilizer.current.getStableResult();
-        if (stable && phase === 'calibrating') {
+        if (stable && (currentPhase === 'detecting_ball' || currentPhase === 'calibrating')) {
           setCmPerPixel(stable.cmPerPixel);
           setPhase('measuring_height');
         }
       } else {
-        setBallPosition(null);
-        if (phase === 'calibrating') {
-          // Lost the ball — go back to detecting
-          stabilizer.current.reset();
-          setPhase('detecting_ball');
+        stabilizer.current.addSample(result);
+        if (stabilizer.current.getMissedFrames() > 8) {
+          setBallPosition(null);
+          if (currentPhase === 'calibrating') {
+            setPhase('detecting_ball');
+          }
         }
       }
 
@@ -365,7 +371,7 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
     return () => {
       if (frameId) cancelAnimationFrame(frameId);
     };
-  }, [cameraReady, ballDetectorReady, phase]);
+  }, [cameraReady, ballDetectorReady]);
 
   const handleRecalibrate = useCallback(() => {
     setPhase('detecting_ball');
