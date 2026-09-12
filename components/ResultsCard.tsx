@@ -27,7 +27,7 @@ export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
       bgColor: 'bg-blue-500/10',
       borderColor: 'border-blue-500/20',
     },
-    {
+    results.wingspanCm ? {
       label: 'Wingspan',
       value: results.wingspanCm,
       imperial: cmToFeetInches(results.wingspanCm),
@@ -35,8 +35,8 @@ export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
       color: 'from-violet-500 to-purple-400',
       bgColor: 'bg-violet-500/10',
       borderColor: 'border-violet-500/20',
-    },
-    {
+    } : null,
+    results.standingReachCm ? {
       label: 'Standing Reach',
       value: results.standingReachCm,
       imperial: cmToFeetInches(results.standingReachCm),
@@ -44,15 +44,26 @@ export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
       color: 'from-amber-500 to-orange-400',
       bgColor: 'bg-amber-500/10',
       borderColor: 'border-amber-500/20',
-    },
-  ];
+    } : null,
+  ].filter(Boolean) as Array<{
+    label: string;
+    value: number;
+    imperial: string;
+    icon: React.ReactNode;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+  }>;
 
-  const wingspanToHeight = results.heightCm > 0
+  const wingspanToHeight = (results.heightCm > 0 && results.wingspanCm)
     ? (results.wingspanCm / results.heightCm).toFixed(2)
-    : '—';
+    : null;
 
   const handleShare = async () => {
-    const text = `My Measurements:\n📏 Height: ${results.heightCm} cm (${cmToFeetInches(results.heightCm)})\n🦅 Wingspan: ${results.wingspanCm} cm (${cmToFeetInches(results.wingspanCm)})\n🙋 Standing Reach: ${results.standingReachCm} cm (${cmToFeetInches(results.standingReachCm)})\n\nMeasured with AI Body Measure`;
+    let text = `My Measurements:\n📏 Height: ${results.heightCm} cm (${cmToFeetInches(results.heightCm)})`;
+    if (results.wingspanCm) text += `\n🦅 Wingspan: ${results.wingspanCm} cm (${cmToFeetInches(results.wingspanCm)})`;
+    if (results.standingReachCm) text += `\n🙋 Standing Reach: ${results.standingReachCm} cm (${cmToFeetInches(results.standingReachCm)})`;
+    text += `\n\nMeasured with AI Body Measure`;
 
     if (navigator.share) {
       try {
@@ -108,19 +119,21 @@ export default function ResultsCard({ results, onRetake }: ResultsCardProps) {
         ))}
 
         {/* Wingspan-to-Height ratio */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">
-                Wingspan / Height Ratio
-              </p>
-              <p className="text-zinc-500 text-xs mt-0.5">
-                (NBA average: ~1.06)
-              </p>
+        {wingspanToHeight && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">
+                  Wingspan / Height Ratio
+                </p>
+                <p className="text-zinc-500 text-xs mt-0.5">
+                  (NBA average: ~1.06)
+                </p>
+              </div>
+              <span className="text-2xl font-bold text-white">{wingspanToHeight}</span>
             </div>
-            <span className="text-2xl font-bold text-white">{wingspanToHeight}</span>
           </div>
-        </div>
+        )}
 
         {/* Basketball Calibration Breakdown */}
         <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-2">

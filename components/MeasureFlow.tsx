@@ -201,15 +201,8 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
 
             if (currentPhase === 'measuring_height') {
               setHeightResult(avg.heightCm);
-              setPhase('measuring_wingspan');
-            } else if (currentPhase === 'measuring_wingspan') {
-              setWingspanResult(avg.wingspanCm);
-              setPhase('measuring_reach');
-            } else if (currentPhase === 'measuring_reach') {
               const finalResults: MeasurementResult = {
-                heightCm: heightResult ?? avg.heightCm,
-                wingspanCm: wingspanResult ?? avg.wingspanCm,
-                standingReachCm: avg.standingReachCm,
+                heightCm: avg.heightCm,
                 cmPerPixel: Math.round(cmPerPixel * 10000) / 10000,
                 ballDiameterPx: cmPerPixel > 0 ? Math.round(BASKETBALL_DIAMETER_CM / cmPerPixel) : 0,
               };
@@ -734,9 +727,7 @@ export default function MeasureFlow({ onComplete, onBack }: MeasureFlowProps) {
         {/* Step indicators */}
         <div className="flex items-center justify-center gap-4">
           {[
-            { label: 'Height', done: completedSteps[0], active: phase === 'measuring_height' },
-            { label: 'Wingspan', done: completedSteps[1], active: phase === 'measuring_wingspan' },
-            { label: 'Reach', done: completedSteps[2], active: phase === 'measuring_reach' },
+            { label: 'Height Measurement', done: phase === 'complete', active: phase === 'measuring_height' },
           ].map((step) => (
             <div key={step.label} className="flex items-center gap-1.5">
               <div
