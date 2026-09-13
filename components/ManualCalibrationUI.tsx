@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
 interface Point {
   x: number;
@@ -10,7 +10,7 @@ interface Point {
 
 interface ManualCalibrationUIProps {
   imageSrc: string;
-  referenceSizeCm: number; // For ATM, we use the longest edge (8.56)
+  referenceSizeCm: number;
   onConfirm: (cmPerPixel: number) => void;
   onCancel: () => void;
 }
@@ -23,51 +23,57 @@ export default function ManualCalibrationUI({
 }: ManualCalibrationUIProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [points, setPoints] = useState<Point[]>([]);
-  const [activePointIdx, setActivePointIdx] = useState<number | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   
+  // High-performance refs (bypass React state for 60fps dragging/zooming)
+  const pointsRef = useRef<Point[]>([]);
+  const activeIdxRef = useRef<number | null>(null);
+  
+  // Viewport transforms
+  const zoomRef = useRef<number>(1);
+  const offsetRef = useRef<Point>({ x: 0, y: 0 });
+  const isPanningRef = useRef<boolean>(false);
+  const lastPanTouchRef = useRef<Point | null>(null);
+  const initialPinchDistRef = useRef<number | null>(null);
+  
+  const [isReady, setIsReady] = useState(false);
+
   // Load image
   useEffect(() => {
     const img = new Image();
     img.src = imageSrc;
     img.onload = () => {
-      setImage(img);
+      imageRef.current = img;
+      
+      // Initialize points in center
+      if (containerRef.current) {
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        const scale = Math.min(w / img.width, h / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        
+        // Start with a box in the center of the image (relative to image native size)
+        const boxW = img.width * 0.4;
+        const boxH = boxW * (5.398 / 8.56); // ATM card ratio
+        const cx = img.width / 2;
+        const cy = img.height / 2;
+
+        pointsRef.current = [
+          { x: cx - boxW / 2, y: cy - boxH / 2 }, // TL
+          { x: cx + boxW / 2, y: cy - boxH / 2 }, // TR
+          { x: cx + boxW / 2, y: cy + boxH / 2 }, // BR
+          { x: cx - boxW / 2, y: cy + boxH / 2 }, // BL
+        ];
+        
+        setIsReady(true);
+      }
     };
   }, [imageSrc]);
 
-  // Initialize points in the center once image loads
-  useEffect(() => {
-    if (image && containerRef.current && points.length === 0) {
-      const container = containerRef.current;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      
-      // Calculate image draw dimensions (object-fit: contain)
-      const scale = Math.min(w / image.width, h / image.height);
-      const drawW = image.width * scale;
-      const drawH = image.height * scale;
-      const offsetX = (w - drawW) / 2;
-      const offsetY = (h - drawH) / 2;
-
-      // Start with a box in the center of the image
-      const boxW = drawW * 0.4;
-      const boxH = boxW * (5.398 / 8.56); // ATM card ratio
-      const cx = offsetX + drawW / 2;
-      const cy = offsetY + drawH / 2;
-
-      setPoints([
-        { x: cx - boxW / 2, y: cy - boxH / 2 }, // TL
-        { x: cx + boxW / 2, y: cy - boxH / 2 }, // TR
-        { x: cx + boxW / 2, y: cy + boxH / 2 }, // BR
-        { x: cx - boxW / 2, y: cy + boxH / 2 }, // BL
-      ]);
-    }
-  }, [image, points.length]);
-
   // Main render loop
   useEffect(() => {
-    if (!image || points.length !== 4) return;
+    if (!isReady || !imageRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -78,19 +84,33 @@ export default function ManualCalibrationUI({
       canvas.height = canvas.clientHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw the frozen frame (contain)
-      const scale = Math.min(canvas.width / image.width, canvas.height / image.height);
-      const drawW = image.width * scale;
-      const drawH = image.height * scale;
-      const offsetX = (canvas.width - drawW) / 2;
-      const offsetY = (canvas.height - drawH) / 2;
-      ctx.drawImage(image, offsetX, offsetY, drawW, drawH);
+      const img = imageRef.current!;
+      const baseScale = Math.min(canvas.width / img.width, canvas.height / img.height);
+      const totalScale = baseScale * zoomRef.current;
+      
+      const drawW = img.width * totalScale;
+      const drawH = img.height * totalScale;
+      
+      // Center offset + pan offset
+      const cx = (canvas.width - drawW) / 2 + offsetRef.current.x;
+      const cy = (canvas.height - drawH) / 2 + offsetRef.current.y;
 
-      // Draw polygon and lines
+      // Draw Image
+      ctx.drawImage(img, cx, cy, drawW, drawH);
+
+      // Helper to convert image coords to screen coords
+      const toScreen = (p: Point) => ({
+        x: cx + p.x * totalScale,
+        y: cy + p.y * totalScale,
+      });
+
+      const screenPoints = pointsRef.current.map(toScreen);
+
+      // Draw polygon
       ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
+      ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
       for (let i = 1; i < 4; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
+        ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
       }
       ctx.closePath();
       ctx.fillStyle = 'rgba(200, 139, 61, 0.2)';
@@ -100,10 +120,10 @@ export default function ManualCalibrationUI({
       ctx.stroke();
 
       // Draw corner points
-      points.forEach((p, i) => {
+      screenPoints.forEach((p, i) => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-        ctx.fillStyle = activePointIdx === i ? '#E85D2C' : '#C88B3D';
+        ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = activeIdxRef.current === i ? '#E85D2C' : '#C88B3D';
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -111,57 +131,48 @@ export default function ManualCalibrationUI({
       });
 
       // Draw Loupe if dragging
-      if (activePointIdx !== null) {
-        const p = points[activePointIdx];
-        const loupeRadius = 45;
-        const zoomScale = 2.5;
-        const loupeOffset = -80; // Offset above the finger
+      if (activeIdxRef.current !== null) {
+        const pScreen = screenPoints[activeIdxRef.current];
+        const pImg = pointsRef.current[activeIdxRef.current];
+        
+        const loupeRadius = 50;
+        const zoomLevel = 2.5; // Loupe zoom
+        const loupeOffset = -90; 
 
-        // Ensure loupe stays on screen
-        let lx = p.x;
-        let ly = p.y + loupeOffset;
-        if (ly - loupeRadius < 0) ly = p.y - loupeOffset; // Flip below if too high
+        let lx = pScreen.x;
+        let ly = pScreen.y + loupeOffset;
+        if (ly - loupeRadius < 0) ly = pScreen.y - loupeOffset; 
 
         ctx.save();
         ctx.beginPath();
         ctx.arc(lx, ly, loupeRadius, 0, Math.PI * 2);
-        ctx.clip(); // Clip to circle
+        ctx.clip(); 
 
-        // Draw zoomed portion
-        // First clear the clipped area with solid black to hide background
         ctx.fillStyle = '#000';
         ctx.fill();
         
-        // Map touch point back to original image coords
-        const imgX = (p.x - offsetX) / scale;
-        const imgY = (p.y - offsetY) / scale;
-        
-        // Draw the zoomed image source
-        // Source region:
-        const srcW = (loupeRadius * 2) / zoomScale / scale;
-        const srcH = (loupeRadius * 2) / zoomScale / scale;
-        const srcX = imgX - srcW / 2;
-        const srcY = imgY - srcH / 2;
+        const srcW = (loupeRadius * 2) / zoomLevel / totalScale;
+        const srcH = (loupeRadius * 2) / zoomLevel / totalScale;
+        const srcX = pImg.x - srcW / 2;
+        const srcY = pImg.y - srcH / 2;
         
         ctx.drawImage(
-          image,
+          img,
           srcX, srcY, srcW, srcH,
           lx - loupeRadius, ly - loupeRadius, loupeRadius * 2, loupeRadius * 2
         );
         
-        // Draw crosshair in loupe
         ctx.strokeStyle = '#C88B3D';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(lx - 5, ly);
-        ctx.lineTo(lx + 5, ly);
-        ctx.moveTo(lx, ly - 5);
-        ctx.lineTo(lx, ly + 5);
+        ctx.moveTo(lx - 8, ly);
+        ctx.lineTo(lx + 8, ly);
+        ctx.moveTo(lx, ly - 8);
+        ctx.lineTo(lx, ly + 8);
         ctx.stroke();
         
         ctx.restore();
 
-        // Draw loupe border
         ctx.beginPath();
         ctx.arc(lx, ly, loupeRadius, 0, Math.PI * 2);
         ctx.strokeStyle = '#E85D2C';
@@ -174,116 +185,153 @@ export default function ManualCalibrationUI({
 
     draw();
     return () => cancelAnimationFrame(frameId);
-  }, [image, points, activePointIdx]);
+  }, [isReady]);
 
-  // Touch handlers
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (points.length !== 4) return;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  // Interaction handlers
+  const getTouchDist = (t1: React.Touch, t2: React.Touch) => 
+    Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 
-    // Find closest point within touch radius
-    let closestIdx = -1;
-    let minDist = 30; // 30px hit radius
-    points.forEach((p, i) => {
-      const dist = Math.hypot(p.x - x, p.y - y);
-      if (dist < minDist) {
-        minDist = dist;
-        closestIdx = i;
+  const getScreenToImage = (x: number, y: number) => {
+    const img = imageRef.current!;
+    const canvas = canvasRef.current!;
+    const baseScale = Math.min(canvas.width / img.width, canvas.height / img.height);
+    const totalScale = baseScale * zoomRef.current;
+    const cx = (canvas.width - (img.width * totalScale)) / 2 + offsetRef.current.x;
+    const cy = (canvas.height - (img.height * totalScale)) / 2 + offsetRef.current.y;
+    return {
+      x: (x - cx) / totalScale,
+      y: (y - cy) / totalScale,
+    };
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      initialPinchDistRef.current = getTouchDist(e.touches[0], e.touches[1]);
+      activeIdxRef.current = null;
+      return;
+    }
+    
+    if (e.touches.length === 1) {
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const tx = e.touches[0].clientX - rect.left;
+      const ty = e.touches[0].clientY - rect.top;
+      
+      const img = imageRef.current!;
+      const baseScale = Math.min(rect.width / img.width, rect.height / img.height);
+      const totalScale = baseScale * zoomRef.current;
+      const cx = (rect.width - (img.width * totalScale)) / 2 + offsetRef.current.x;
+      const cy = (rect.height - (img.height * totalScale)) / 2 + offsetRef.current.y;
+
+      // Find if we touched a point
+      let closestIdx = -1;
+      let minDist = 40; // hit radius
+      pointsRef.current.forEach((p, i) => {
+        const sx = cx + p.x * totalScale;
+        const sy = cy + p.y * totalScale;
+        const dist = Math.hypot(sx - tx, sy - ty);
+        if (dist < minDist) {
+          minDist = dist;
+          closestIdx = i;
+        }
+      });
+
+      if (closestIdx !== -1) {
+        activeIdxRef.current = closestIdx;
+      } else {
+        isPanningRef.current = true;
+        lastPanTouchRef.current = { x: tx, y: ty };
       }
-    });
-
-    if (closestIdx !== -1) {
-      setActivePointIdx(closestIdx);
     }
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (activePointIdx === null || points.length !== 4) return;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    const rect = canvasRef.current!.getBoundingClientRect();
     
-    // Allow dragging outside slightly, but clamp to canvas bounds
-    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    if (e.touches.length === 2 && initialPinchDistRef.current !== null) {
+      const dist = getTouchDist(e.touches[0], e.touches[1]);
+      const delta = dist / initialPinchDistRef.current;
+      zoomRef.current = Math.min(Math.max(1, zoomRef.current * delta), 10);
+      initialPinchDistRef.current = dist;
+      return;
+    }
 
-    setPoints((prev) => {
-      const next = [...prev];
-      next[activePointIdx] = { x, y };
-      return next;
-    });
+    if (e.touches.length === 1) {
+      const tx = e.touches[0].clientX - rect.left;
+      const ty = e.touches[0].clientY - rect.top;
+
+      if (activeIdxRef.current !== null) {
+        const imgP = getScreenToImage(tx, ty);
+        pointsRef.current[activeIdxRef.current] = imgP;
+      } else if (isPanningRef.current && lastPanTouchRef.current) {
+        const dx = tx - lastPanTouchRef.current.x;
+        const dy = ty - lastPanTouchRef.current.y;
+        offsetRef.current.x += dx;
+        offsetRef.current.y += dy;
+        lastPanTouchRef.current = { x: tx, y: ty };
+      }
+    }
   };
 
-  const handlePointerUp = () => {
-    setActivePointIdx(null);
+  const handleTouchEnd = () => {
+    activeIdxRef.current = null;
+    isPanningRef.current = false;
+    initialPinchDistRef.current = null;
+    lastPanTouchRef.current = null;
   };
 
   const handleConfirm = () => {
-    if (points.length !== 4 || !image || !containerRef.current) return;
+    if (!imageRef.current || !containerRef.current) return;
     
-    // Calculate scale from view to image
-    const container = containerRef.current;
-    const scale = Math.min(container.clientWidth / image.width, container.clientHeight / image.height);
-
-    // Find the longest edge (we assume user aligns longest edge to 8.56cm)
-    let maxDistViewPx = 0;
+    // Find longest edge in native image pixels
+    let maxDistPx = 0;
     for (let i = 0; i < 4; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % 4];
+      const p1 = pointsRef.current[i];
+      const p2 = pointsRef.current[(i + 1) % 4];
       const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-      if (dist > maxDistViewPx) {
-        maxDistViewPx = dist;
+      if (dist > maxDistPx) {
+        maxDistPx = dist;
       }
     }
 
-    // Convert view pixels to actual image pixels
-    const maxDistImagePx = maxDistViewPx / scale;
-
-    // cmPerPixel (in actual image space)
-    const pixelsPerCm = maxDistImagePx / referenceSizeCm;
-    const cmPerPixel = 1 / pixelsPerCm;
-    
+    // cmPerPixel = real size / pixel size
+    const cmPerPixel = referenceSizeCm / maxDistPx;
     onConfirm(cmPerPixel);
   };
 
+  const handleZoomIn = () => { zoomRef.current = Math.min(zoomRef.current * 1.5, 10); };
+  const handleZoomOut = () => { zoomRef.current = Math.max(zoomRef.current / 1.5, 1); };
+  const handleResetZoom = () => { zoomRef.current = 1; offsetRef.current = { x: 0, y: 0 }; };
+
   return (
     <div className="absolute inset-0 bg-black z-50 flex flex-col">
-      <div className="bg-[#141110] px-5 py-4 border-b border-[#2A2521] shadow-lg z-10">
-        <h3 className="text-[#F2EEE4] text-sm font-semibold">Align the Card</h3>
-        <p className="text-[#8B8478] text-xs mt-1">
-          Drag the 4 corners to perfectly outline the ATM card. The magnifier will help you be precise.
-        </p>
+      <div className="bg-[#141110] px-5 py-4 border-b border-[#2A2521] flex justify-between items-center z-10">
+        <div>
+          <h3 className="text-[#F2EEE4] text-sm font-semibold">Align the Card</h3>
+          <p className="text-[#8B8478] text-xs mt-1">Pinch to zoom. Drag outside the corners to pan.</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleZoomOut} className="p-2 bg-[#2A2521] rounded text-[#F2EEE4]"><ZoomOut className="w-4 h-4" /></button>
+          <button onClick={handleResetZoom} className="p-2 bg-[#2A2521] rounded text-[#F2EEE4]"><Maximize className="w-4 h-4" /></button>
+          <button onClick={handleZoomIn} className="p-2 bg-[#2A2521] rounded text-[#F2EEE4]"><ZoomIn className="w-4 h-4" /></button>
+        </div>
       </div>
 
       <div 
         ref={containerRef}
-        className="flex-1 relative overflow-hidden touch-none cursor-crosshair"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        className="flex-1 relative overflow-hidden touch-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full block"
-        />
+        <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
 
       <div className="bg-[#141110] px-5 pt-4 pb-6 border-t border-[#2A2521] flex gap-3 z-10">
-        <button
-          onClick={onCancel}
-          className="flex-1 py-3 text-sm font-medium"
-          style={{ color: '#8B8478' }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleConfirm}
-          className="flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 rounded transition-opacity active:opacity-80"
-          style={{ background: '#C88B3D', color: '#141110' }}
-        >
+        <button onClick={onCancel} className="flex-1 py-3 text-sm font-medium text-[#8B8478]">Cancel</button>
+        <button onClick={handleConfirm} className="flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 bg-[#C88B3D] text-[#141110] rounded">
           <CheckCircle2 className="w-4 h-4" />
           Confirm
         </button>
