@@ -5,7 +5,7 @@
  * regardless of clothing color or background.
  */
 
-import { BASKETBALL_DIAMETER_CM } from './measurements';
+// No static import, target diameter passed dynamically
 
 export interface BallDetectionResult {
   found: boolean;
@@ -64,7 +64,8 @@ export async function initBallDetector(): Promise<void> {
  */
 export function detectBasketball(
   videoElement: HTMLVideoElement,
-  timestamp: number
+  timestamp: number,
+  targetDiameterCm: number = 24.1
 ): BallDetectionResult {
   const empty: BallDetectionResult = {
     found: false,
@@ -139,7 +140,7 @@ export function detectBasketball(
       return empty;
     }
 
-    const cmPerPixel = BASKETBALL_DIAMETER_CM / diameterPx;
+    const cmPerPixel = targetDiameterCm / diameterPx;
 
     return {
       found: true,
@@ -201,7 +202,7 @@ export class BallDetectionStabilizer {
     return this.samples.length >= 6; // Reduced from 10 to 6
   }
 
-  getStableResult(): BallDetectionResult | null {
+  getStableResult(targetDiameterCm: number = 24.1): BallDetectionResult | null {
     if (!this.isStable()) return null;
 
     const n = this.samples.length;
@@ -223,7 +224,7 @@ export class BallDetectionStabilizer {
       centerX: avgCenterX,
       centerY: avgCenterY,
       diameterPx: avgDiameter,
-      cmPerPixel: BASKETBALL_DIAMETER_CM / avgDiameter,
+      cmPerPixel: targetDiameterCm / avgDiameter,
       confidence: avgConfidence,
       boundingBox: { x: 0, y: 0, width: avgDiameter, height: avgDiameter },
     };

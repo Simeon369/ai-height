@@ -165,7 +165,8 @@ export function computeMeasurements(
   landmarks: NormalizedLandmark[],
   cmPerPixel: number,
   imgWidth: number,
-  imgHeight: number
+  imgHeight: number,
+  referenceSizeCm: number = 24.1
 ): MeasurementResult {
   // --- HEIGHT ---
   const topOfHead = estimateTopOfHead(landmarks, imgWidth, imgHeight);
@@ -250,7 +251,7 @@ export function computeMeasurements(
     wingspanCm: Math.round(wingspanCm * 10) / 10,
     standingReachCm: Math.round(standingReachCm * 10) / 10,
     cmPerPixel: Math.round(cmPerPixel * 10000) / 10000,
-    ballDiameterPx: Math.round(BASKETBALL_DIAMETER_CM / cmPerPixel),
+    ballDiameterPx: Math.round(referenceSizeCm / cmPerPixel),
   };
 }
 
@@ -312,5 +313,22 @@ export function averageMeasurements(
   };
 }
 
-// Size 7 basketball diameter in cm
-export const BASKETBALL_DIAMETER_CM = 24.1;
+// Size 7 basketball diameter in cm is now part of REFERENCE_OBJECTS
+export type ReferenceType = 'ball' | 'card';
+
+export interface ReferenceObject {
+  id: string;
+  name: string;
+  type: ReferenceType;
+  sizeCm: number; // Diameter for balls, width for ATM card
+}
+
+export const REFERENCE_OBJECTS: ReferenceObject[] = [
+  { id: 'basketball_7', name: 'Basketball (Size 7)', type: 'ball', sizeCm: 24.1 },
+  { id: 'basketball_6', name: 'Women\'s Basketball (Size 6)', type: 'ball', sizeCm: 23.0 },
+  { id: 'soccer_5', name: 'Soccer Ball (Size 5)', type: 'ball', sizeCm: 22.0 },
+  { id: 'volleyball', name: 'Volleyball', type: 'ball', sizeCm: 21.0 },
+  { id: 'tennis', name: 'Tennis Ball', type: 'ball', sizeCm: 6.7 },
+  { id: 'atm_card', name: 'ATM / Credit Card', type: 'card', sizeCm: 8.56 },
+];
+
