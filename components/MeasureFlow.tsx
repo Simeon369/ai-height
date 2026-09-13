@@ -137,6 +137,7 @@ function MeasureFlowContent({ onComplete, onBack }: MeasureFlowProps) {
   // Manual Calibration States
   const [frozenFrameSrc, setFrozenFrameSrc] = useState<string | null>(null);
   const [preCalculatedHeightPx, setPreCalculatedHeightPx] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -170,31 +171,7 @@ function MeasureFlowContent({ onComplete, onBack }: MeasureFlowProps) {
             setSampleCount(measurementSamples.current.length);
             
             if (measurementSamples.current.length >= SAMPLES_NEEDED) {
-              // Freeze frame and extract pixel height
-              const canvas = document.createElement('canvas');
-              canvas.width = w;
-              canvas.height = h;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                // If front camera, we need to flip the canvas context before drawing
-                if (facingMode === 'user') {
-                  ctx.translate(w, 0);
-                  ctx.scale(-1, 1);
-                }
-                ctx.drawImage(videoRef.current, 0, 0, w, h);
-                setFrozenFrameSrc(canvas.toDataURL('image/jpeg', 0.9));
-              }
-
-              // Calculate raw pixel height from head to floor (approx)
-              const topOfHeadY = landmarks[LANDMARKS.NOSE].y * h; // simplified
-              const floorY = Math.max(
-                landmarks[LANDMARKS.LEFT_HEEL].y * h,
-                landmarks[LANDMARKS.RIGHT_HEEL].y * h
-              );
-              setPreCalculatedHeightPx(Math.abs(floorY - topOfHeadY));
-              
-              setPhase('manual_calibration');
-              stopDetectionLoop();
+              setCountdown((prev) => (prev === null ? 5 : prev));
             }
           } else {
             // Standard ML ball logic
@@ -229,9 +206,50 @@ function MeasureFlowContent({ onComplete, onBack }: MeasureFlowProps) {
           // Reset samples if pose is broken
           measurementSamples.current = [];
           setSampleCount(0);
+          setCountdown(null);
         }
       },
     });
+
+  // Countdown Effect
+  useEffect(() => {
+    if (countdown === null) return;
+    
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } 
+    
+    if (countdown === 0 && videoRef.current && latestLandmarksRef.current) {
+      const w = videoRef.current.videoWidth;
+      const h = videoRef.current.videoHeight;
+      const landmarks = latestLandmarksRef.current;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        if (facingMode === 'user') {
+          ctx.translate(w, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(videoRef.current, 0, 0, w, h);
+        setFrozenFrameSrc(canvas.toDataURL('image/jpeg', 0.9));
+      }
+
+      const topOfHeadY = landmarks[LANDMARKS.NOSE].y * h;
+      const floorY = Math.max(
+        landmarks[LANDMARKS.LEFT_HEEL].y * h,
+        landmarks[LANDMARKS.RIGHT_HEEL].y * h
+      );
+      setPreCalculatedHeightPx(Math.abs(floorY - topOfHeadY));
+      
+      setPhase('manual_calibration');
+      stopDetectionLoop();
+      setCountdown(null);
+    }
+  }, [countdown, facingMode, stopDetectionLoop]);
 
   const startCamera = useCallback(async () => {
     setCameraReady(false);
@@ -360,6 +378,7 @@ function MeasureFlowContent({ onComplete, onBack }: MeasureFlowProps) {
     setValidationError(null);
     setSampleCount(0);
     setFrozenFrameSrc(null);
+    setCountdown(null);
     measurementSamples.current = [];
     stabilizer.current.reset();
   }, [isManualCard]);
@@ -468,6 +487,15 @@ function MeasureFlowContent({ onComplete, onBack }: MeasureFlowProps) {
             <SwitchCamera className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Countdown Overlay */}
+        {countdown !== null && countdown > 0 && phase === 'measuring_height' && (
+          <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none" style={{ background: 'rgba(20,17,16,0.3)' }}>
+            <span className="font-tabular font-bold drop-shadow-2xl animate-pulse" style={{ fontSize: '8rem', color: '#E85D2C' }}>
+              {countdown}
+            </span>
+          </div>
+        )}
 
         {((!cameraReady && !cameraError) || (!ballDetectorReady && !cameraError)) && (
           <div className="absolute inset-0 flex items-center justify-center z-20" style={{ background: 'rgba(20,17,16,0.85)' }}>

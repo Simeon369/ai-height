@@ -332,3 +332,6 @@ export const REFERENCE_OBJECTS: ReferenceObject[] = [
   { id: 'atm_card', name: 'ATM / Credit Card', type: 'card', sizeCm: 8.56 },
 ];
 
+export const BASKETBALL_DIAMETER_CM = 24.1;
+
+
